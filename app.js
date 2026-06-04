@@ -177,7 +177,7 @@ function updateStatus() {
   const found = state.filteredJokes.length;
   const favs  = state.favoriteIds.size;
   let text = `Redzēti: ${shown}/${total} • Atrasti: ${found} • Favorīti: ${favs}`;
-  if (state.mode === 'RESULTS')   text = 'Atrastie joki • ' + text;
+  if (state.mode === 'RESULTS')   text = 'Visi joki • ' + text;
   if (state.mode === 'FAVORITES') text = 'Favorīti • ' + text;
   if (state.mode === 'SETTINGS')  text = 'Iestatījumi • ' + text;
   el.statusText.textContent = text;
@@ -206,7 +206,7 @@ function refreshList() {
   let items = [];
   if (state.mode === 'RESULTS') {
     items = state.filteredJokes;
-    el.listTitle.textContent = 'Atrasto joku saraksts';
+    el.listTitle.textContent = 'Visi joki';
   } else if (state.mode === 'FAVORITES') {
     items = state.allJokes.filter(j => state.favoriteIds.has(j.id));
     if (state.searchQuery.trim()) {
@@ -316,6 +316,17 @@ function toggleFavorite() {
 }
 
 // ── Donate ────────────────────────────────────────────────────────────────
+// iOS Safari safe external link opener
+function openLink(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function openModal(id) {
   $(id).classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -460,13 +471,13 @@ function init() {
   el.btnDonateCancel.addEventListener('click', () => closeModal('donate-modal'));
   el.donateModal.addEventListener('click', e => { if (e.target === el.donateModal) closeModal('donate-modal'); });
   el.btnBmc.addEventListener('click', () => {
-    window.open('https://buymeacoffee.com/ingmarsv', '_blank'); closeModal('donate-modal');
+    closeModal('donate-modal'); openLink('https://buymeacoffee.com/ingmarsv');
   });
   el.btnRevolut.addEventListener('click', () => {
-    window.open('https://revolut.me/ingmars2v72', '_blank'); closeModal('donate-modal');
+    closeModal('donate-modal'); openLink('https://revolut.me/ingmars2v72');
   });
   el.btnPaypal.addEventListener('click', () => {
-    window.open('https://paypal.me/IngmarsVigners', '_blank'); closeModal('donate-modal');
+    closeModal('donate-modal'); openLink('https://paypal.me/IngmarsVigners');
   });
 
   // Contact button
