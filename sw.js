@@ -1,4 +1,4 @@
-const CACHE = 'sliktie-joki-v3';
+const CACHE = 'sliktie-joki-v5';
 const BASE = '/sliktie-joki';
 const ASSETS = [
   BASE + '/',
@@ -6,19 +6,19 @@ const ASSETS = [
   BASE + '/style.css',
   BASE + '/app.js',
   BASE + '/jokes-data.js',
-  BASE + '/sounds/joke_reveal.mp3',
-  BASE + '/sounds/sound_1_sparkle.mp3',
-  BASE + '/sounds/sound_2_click.mp3',
-  BASE + '/sounds/sound_2_rimshot.mp3',
-  BASE + '/sounds/sound_2_typewriter.mp3',
-  BASE + '/sounds/sound_3_boing.mp3',
-  BASE + '/sounds/sound_3_chime.mp3',
-  BASE + '/sounds/sound_3_laser.mp3',
-  BASE + '/sounds/sound_3_rise.mp3',
-  BASE + '/sounds/sound_4_ding.mp3',
-  BASE + '/sounds/sound_4_drum.mp3',
-  BASE + '/sounds/sound_4_pop.mp3',
-  BASE + '/sounds/sound_5_whoosh.mp3'
+  BASE + '/joke_reveal.mp3',
+  BASE + '/sound_1_sparkle.mp3',
+  BASE + '/sound_2_click.mp3',
+  BASE + '/sound_2_rimshot.mp3',
+  BASE + '/sound_2_typewriter.mp3',
+  BASE + '/sound_3_boing.mp3',
+  BASE + '/sound_3_chime.mp3',
+  BASE + '/sound_3_laser.mp3',
+  BASE + '/sound_3_rise.mp3',
+  BASE + '/sound_4_ding.mp3',
+  BASE + '/sound_4_drum.mp3',
+  BASE + '/sound_4_pop.mp3',
+  BASE + '/sound_5_whoosh.mp3'
 ];
 
 self.addEventListener('install', e => {

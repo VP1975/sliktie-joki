@@ -109,19 +109,19 @@ function matchesQuery(jokeText, query) {
 
 // ── Audio ─────────────────────────────────────────────────────────────────
 const SOUNDS = {
-  'sparkle':    'sounds/sound_1_sparkle.mp3',
-  'click':      'sounds/sound_2_click.mp3',
-  'rimshot':    'sounds/sound_2_rimshot.mp3',
-  'typewriter': 'sounds/sound_2_typewriter.mp3',
-  'boing':      'sounds/sound_3_boing.mp3',
-  'chime':      'sounds/sound_3_chime.mp3',
-  'laser':      'sounds/sound_3_laser.mp3',
-  'rise':       'sounds/sound_3_rise.mp3',
-  'ding':       'sounds/sound_4_ding.mp3',
-  'drum':       'sounds/sound_4_drum.mp3',
-  'pop':        'sounds/sound_4_pop.mp3',
-  'whoosh':     'sounds/sound_5_whoosh.mp3',
-  'nav':        'sounds/joke_reveal.mp3',
+  'sparkle':    'sound_1_sparkle.mp3',
+  'click':      'sound_2_click.mp3',
+  'rimshot':    'sound_2_rimshot.mp3',
+  'typewriter': 'sound_2_typewriter.mp3',
+  'boing':      'sound_3_boing.mp3',
+  'chime':      'sound_3_chime.mp3',
+  'laser':      'sound_3_laser.mp3',
+  'rise':       'sound_3_rise.mp3',
+  'ding':       'sound_4_ding.mp3',
+  'drum':       'sound_4_drum.mp3',
+  'pop':        'sound_4_pop.mp3',
+  'whoosh':     'sound_5_whoosh.mp3',
+  'nav':        'joke_reveal.mp3',
   'off':        null,
 };
 let audioCtx = null;
