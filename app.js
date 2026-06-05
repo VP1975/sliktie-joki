@@ -47,7 +47,7 @@ const el = {
   listTitle:         $('list-title'),
   listScroll:        $('list-scroll'),
   catFilterWrap:     $('cat-filter-wrap'),
-  catChips:          $('cat-chips'),
+  catSelect:         $('cat-select'),
   settingsContainer: $('settings-container'),
   searchInput:       $('search-input'),
   searchClear:       $('search-clear'),
@@ -240,23 +240,20 @@ function switchMode(mode) {
   // Kategoriju filtrs redzams tikai saraksta skatā
   el.catFilterWrap.style.display = isList ? 'block' : 'none';
 
-  if (isList) { buildCatChips(); refreshList(); }
+  if (isList) { buildCatSelect(); refreshList(); }
   updateStatus();
 }
 
-// ── Category chips ────────────────────────────────────────────────────────
-function buildCatChips() {
-  el.catChips.innerHTML = '';
+// ── Category select (dropdown) ───────────────────────────────────────────
+function buildCatSelect() {
+  const sel = el.catSelect;
+  sel.innerHTML = '';
 
-  // "Visas" chips
-  const all = document.createElement('button');
-  all.className = 'cat-chip' + (!state.selectedCat ? ' selected' : '');
-  all.textContent = 'Visas';
-  all.dataset.cat = '';
-  all.addEventListener('click', () => selectCat(''));
-  el.catChips.appendChild(all);
+  const allOpt = document.createElement('option');
+  allOpt.value = '';
+  allOpt.textContent = 'Visas kategorijas';
+  sel.appendChild(allOpt);
 
-  // Kategorijas ar jokiem (tikai tās, kurās ir joki pašreizējā skatā)
   const available = new Set(
     (state.mode === 'FAVORITES'
       ? state.allJokes.filter(j => state.favoriteIds.has(j.id))
@@ -266,21 +263,19 @@ function buildCatChips() {
 
   CATEGORIES.forEach(cat => {
     if (!available.has(cat)) return;
-    const btn = document.createElement('button');
-    btn.className = 'cat-chip' + (state.selectedCat === cat ? ' selected' : '');
-    btn.textContent = cat;
-    btn.dataset.cat = cat;
-    btn.addEventListener('click', () => selectCat(cat));
-    el.catChips.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value = cat;
+    const count = state.allJokes.filter(j => j.cat === cat &&
+      (state.mode !== 'FAVORITES' || state.favoriteIds.has(j.id))).length;
+    opt.textContent = cat + ' (' + count + ')';
+    sel.appendChild(opt);
   });
+
+  sel.value = state.selectedCat;
 }
 
 function selectCat(cat) {
   applyFilter(undefined, cat);
-  // Atjaunojam chip stāvokļus
-  el.catChips.querySelectorAll('.cat-chip').forEach(c => {
-    c.classList.toggle('selected', c.dataset.cat === cat);
-  });
   haptic();
 }
 
@@ -566,6 +561,10 @@ function init() {
 
   el.iosHintClose.addEventListener('click', () => {
     el.iosHint.classList.remove('show'); LS.set('iosHintDismissed', true);
+  });
+
+  el.catSelect.addEventListener('change', () => {
+    selectCat(el.catSelect.value);
   });
 }
 
