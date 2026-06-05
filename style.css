@@ -218,12 +218,31 @@ html, body {
 /* ── Primary Action ──────────────────────────────── */
 #primary-bar {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 10px;
   flex-shrink: 0;
 }
+#btn-prev {
+  background: none;
+  border: 2px solid var(--outline);
+  border-radius: var(--radius-btn);
+  height: 52px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0 12px;
+  flex-shrink: 0;
+  transition: border-color 0.12s, color 0.12s, opacity 0.15s;
+}
+#btn-prev:not(:disabled):active {
+  border-color: var(--brand);
+  color: var(--brand);
+}
 #btn-random {
   flex: 1;
+  min-width: 0;
   background: var(--brand);
   color: #000;
   border: none;
@@ -662,30 +681,4 @@ html, body {
   opacity: 0.85;
 }
 
-/* ── btn-prev (Pag' patin atpakaļ) ──────────────────── */
-#primary-bar {
-  display: flex;
-  gap: 8px;
-}
-#btn-prev {
-  background: none;
-  border: 2px solid var(--outline);
-  border-radius: var(--radius-btn);
-  height: 52px;
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 0 12px;
-  flex-shrink: 0;
-  transition: border-color 0.12s, color 0.12s, opacity 0.15s;
-}
-#btn-prev:not(:disabled):active {
-  border-color: var(--brand);
-  color: var(--brand);
-}
-#btn-random {
-  flex: 1;
-  min-width: 0;
-}
+
