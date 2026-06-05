@@ -484,13 +484,23 @@ function init() {
   el.btnFavorite.addEventListener('click', toggleFavorite);
   el.btnStar.addEventListener('click', () => { switchMode('FAVORITES'); playSound('nav'); });
 
-  el.btnResults.addEventListener('click', () => { switchMode('RESULTS'); playSound('nav'); });
+  el.btnResults.addEventListener('click', () => {
+    state.selectedCat = '';
+    applyFilter(undefined, '');
+    switchMode('RESULTS');
+    playSound('nav');
+  });
   el.btnResetShown.addEventListener('click', () => {
     state.shownIds.clear(); saveShown(); haptic(); updateStatus();
     showToast('Redzēto saraksts notīrīts');
   });
   el.btnSettings.addEventListener('click', () => { switchMode('SETTINGS'); playSound('nav'); });
-  el.btnNavBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
+  el.btnNavBack.addEventListener('click', () => {
+    state.selectedCat = '';
+    applyFilter(undefined, '');
+    switchMode('MAIN');
+    playSound('nav');
+  });
 
   el.btnBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
   el.btnResetSearch.addEventListener('click', () => {
