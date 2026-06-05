@@ -3,8 +3,8 @@
 // ── Kategoriju saraksts ───────────────────────────────────────────────────
 const CATEGORIES = [
   "Absurdie joki","Attiecības","Bērni","Blondīnes","Citāti","Daba","Dakteri",
-  "Geji","Kas atšķirīgs?","Kas kopīgs?","Laikmetīgie...","Matemātika","Nacisms",
-  "Nederīgās lietas","Nekrofīli","Nezināmais Čaks","Nezināmie fakti","Paradoksi",
+  "Geji","Kas kopīgs?","Laikmetīgie...","Matemātika","Nacisms",
+  "Nederīgās lietas","Nekrofīli","Nezināmais Čaks","Nezināmie fakti",
   "Pedofīli","Politika","Priesteri","Rasisms","Ratiņkrēsli","Runā ka...","Sekss",
   "Senlatviešu dievības","Sievietes","Tautas gudrības","Vārdu spēles","Vecums","Veģetārieši"
 ];
