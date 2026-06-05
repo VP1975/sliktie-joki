@@ -1,5 +1,14 @@
 'use strict';
 
+// ── Kategoriju saraksts ───────────────────────────────────────────────────
+const CATEGORIES = [
+  "Absurdie joki","Attiecības","Bērni","Blondīnes","Citāti","Daba","Dakteri",
+  "Geji","Kas atšķirīgs?","Kas kopīgs?","Laikmetīgie...","Matemātika","Nacisms",
+  "Nederīgās lietas","Nekrofīli","Nezināmais Čaks","Nezināmie fakti","Paradoksi",
+  "Pedofīli","Politika","Priesteri","Rasisms","Ratiņkrēsli","Runā ka...","Sekss",
+  "Senlatviešu dievības","Sievietes","Tautas gudrības","Vārdu spēles","Vecums","Veģetārieši"
+];
+
 // ── State ─────────────────────────────────────────────────────────────────
 const state = {
   allJokes: [],
@@ -7,53 +16,57 @@ const state = {
   shownIds: new Set(),
   favoriteIds: new Set(),
   currentJoke: null,
-  mode: 'MAIN',   // MAIN | RESULTS | FAVORITES | SETTINGS
+  history: [],          // skatīto joku vēsture (random režīmā)
+  historyPos: -1,       // pašreizējā pozīcija vēsturē (-1 = jauns joks)
+  mode: 'MAIN',
   fontSize: 20,
   selectedSound: 'sparkle',
   searchQuery: '',
+  selectedCat: '',      // aktīvā kategorija filtrā ('') = visi
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
-  jokeCard:        $('joke-card'),
-  statusText:      $('status-text'),
-  jokeNumber:      $('joke-number'),
-  jokeText:        $('joke-text'),
-  btnFavorite:     $('btn-favorite'),
-  btnResetSearch:  $('btn-reset-search'),
-  btnRandom:       $('btn-random'),
-  btnStar:         $('btn-star'),
-  navBar:          $('nav-bar'),
-  btnResults:      $('btn-results'),
-  btnResetShown:   $('btn-reset-shown'),
-  btnSettings:     $('btn-settings'),
-  btnBack:         $('btn-back'),
-  listContainer:   $('list-container'),
-  listTitle:       $('list-title'),
-  listScroll:      $('list-scroll'),
+  jokeCard:          $('joke-card'),
+  statusText:        $('status-text'),
+  jokeNumber:        $('joke-number'),
+  jokeText:          $('joke-text'),
+  btnFavorite:       $('btn-favorite'),
+  btnResetSearch:    $('btn-reset-search'),
+  btnRandom:         $('btn-random'),
+  btnBack:           $('btn-back'),
+  btnPrev:           $('btn-prev'),
+  btnStar:           $('btn-star'),
+  navBar:            $('nav-bar'),
+  btnResults:        $('btn-results'),
+  btnResetShown:     $('btn-reset-shown'),
+  btnSettings:       $('btn-settings'),
+  btnNavBack:        $('btn-nav-back'),
+  listContainer:     $('list-container'),
+  listTitle:         $('list-title'),
+  listScroll:        $('list-scroll'),
+  catFilterWrap:     $('cat-filter-wrap'),
+  catChips:          $('cat-chips'),
   settingsContainer: $('settings-container'),
-  searchInput:     $('search-input'),
-  searchClear:     $('search-clear'),
-  fontMinus:       $('font-minus'),
-  fontPlus:        $('font-plus'),
-  btnDonate:       $('btn-donate'),
-  toast:           $('toast'),
-  // Donate modal
-  donateModal:     $('donate-modal'),
-  btnBmc:          $('btn-bmc'),
-  btnRevolut:      $('btn-revolut'),
-  btnPaypal:       $('btn-paypal'),
-  btnDonateCancel: $('btn-donate-cancel'),
-  // Contact modal
-  contactModal:    $('contact-modal'),
-  contactInput:    $('contact-input'),
-  contactCounter:  $('contact-counter'),
-  btnContactSend:  $('btn-contact-send'),
-  btnContactCancel:$('btn-contact-cancel'),
-  // iOS hint
-  iosHint:         $('ios-hint'),
-  iosHintClose:    $('ios-hint-close'),
+  searchInput:       $('search-input'),
+  searchClear:       $('search-clear'),
+  fontMinus:         $('font-minus'),
+  fontPlus:          $('font-plus'),
+  btnDonate:         $('btn-donate'),
+  toast:             $('toast'),
+  donateModal:       $('donate-modal'),
+  btnBmc:            $('btn-bmc'),
+  btnRevolut:        $('btn-revolut'),
+  btnPaypal:         $('btn-paypal'),
+  btnDonateCancel:   $('btn-donate-cancel'),
+  contactModal:      $('contact-modal'),
+  contactInput:      $('contact-input'),
+  contactCounter:    $('contact-counter'),
+  btnContactSend:    $('btn-contact-send'),
+  btnContactCancel:  $('btn-contact-cancel'),
+  iosHint:           $('ios-hint'),
+  iosHintClose:      $('ios-hint-close'),
 };
 
 // ── Persistence ───────────────────────────────────────────────────────────
@@ -67,10 +80,8 @@ function loadPrefs() {
   state.favoriteIds = new Set(LS.get('favoriteIds') || []);
   state.fontSize    = LS.get('fontSize') || 20;
   state.selectedSound = LS.get('selectedSound') || 'sparkle';
-  const lastId = LS.get('lastJokeId');
-  return lastId;
+  return LS.get('lastJokeId');
 }
-
 function saveShown()     { LS.set('shownIds', [...state.shownIds]); }
 function saveFavorites() { LS.set('favoriteIds', [...state.favoriteIds]); }
 function saveLastJoke()  { if (state.currentJoke) LS.set('lastJokeId', state.currentJoke.id); }
@@ -87,8 +98,8 @@ function normalizeLv(s) {
     .replace(/ū/g,'u').replace(/ž/g,'z')
     .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
 }
-const SUFFIXES = ['ajiem','ajam','ajai','ajās','ajus','ajām',
-  'iem','ajos','ajā','ām','am','em','im','us','as','es','os','is','ai','ei','ie','u','a','i','e','s'];
+const SUFFIXES = ['ajiem','ajam','ajai','ajās','ajus','ajām','iem','ajos','ajā',
+  'ām','am','em','im','us','as','es','os','is','ai','ei','ie','u','a','i','e','s'];
 function stem(word) {
   const w = normalizeLv(word);
   for (const s of SUFFIXES) {
@@ -96,12 +107,9 @@ function stem(word) {
   }
   return w;
 }
-function stems(text) {
-  return normalizeLv(text).split(' ').map(w => stem(w)).filter(w => w.length >= 2);
-}
 function matchesQuery(jokeText, query) {
   if (!query.trim()) return true;
-  const qs = stems(query);
+  const qs = normalizeLv(query).split(' ').map(w => stem(w)).filter(w => w.length >= 2);
   if (!qs.length) return true;
   const norm = normalizeLv(jokeText);
   return qs.every(s => norm.includes(s));
@@ -124,21 +132,14 @@ const SOUNDS = {
   'nav':        'joke_reveal.mp3',
   'off':        null,
 };
-let audioCtx = null;
 function playSound(key) {
-  const src = SOUNDS[key || state.selectedSound];
+  const src = SOUNDS[key !== undefined ? key : state.selectedSound];
   if (!src) return;
-  try {
-    const audio = new Audio(src);
-    audio.volume = 0.7;
-    audio.play().catch(() => {});
-  } catch {}
+  try { const a = new Audio(src); a.volume = 0.7; a.play().catch(() => {}); } catch {}
 }
 
 // ── Haptic ────────────────────────────────────────────────────────────────
-function haptic() {
-  try { navigator.vibrate?.(12); } catch {}
-}
+function haptic() { try { navigator.vibrate?.(12); } catch {} }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
 let toastTimer = null;
@@ -149,13 +150,48 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.toast.classList.remove('show'), 2200);
 }
 
+// ── Open external link (iOS Safari safe) ──────────────────────────────────
+function openLink(url) {
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Filter (search + category) ────────────────────────────────────────────
+function applyFilter(query, cat) {
+  if (query !== undefined) state.searchQuery = query;
+  if (cat !== undefined)   state.selectedCat = cat;
+
+  state.filteredJokes = state.allJokes.filter(j => {
+    const catOk = !state.selectedCat || j.cat === state.selectedCat;
+    const txtOk = matchesQuery(j.text, state.searchQuery);
+    return catOk && txtOk;
+  });
+
+  el.searchClear.classList.toggle('visible', state.searchQuery.length > 0);
+  el.btnResetSearch.classList.toggle('visible', state.searchQuery.length > 0 || state.selectedCat !== '');
+
+  if (!state.filteredJokes.length) {
+    el.jokeNumber.textContent = '';
+    el.jokeText.textContent = 'Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini citu vārdu vai kategoriju.';
+  } else if (!state.filteredJokes.find(j => j.id === state.currentJoke?.id)) {
+    state.currentJoke = state.filteredJokes[0];
+    renderJoke(state.currentJoke, false);
+    saveLastJoke();
+  }
+
+  if (state.mode === 'RESULTS' || state.mode === 'FAVORITES') refreshList();
+  updateStatus();
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 function renderJoke(joke, animate) {
   if (!joke) return;
-  el.jokeNumber.textContent = `Joks #${joke.id}`;
+  el.jokeNumber.textContent = `Joks #${joke.id}  ·  ${joke.cat || ''}`;
   el.jokeText.textContent = joke.text;
   el.jokeText.style.fontSize = state.fontSize + 'px';
   renderFavState();
+  renderPrevBtn();
   if (animate) {
     el.jokeCard.classList.remove('animate-in');
     void el.jokeCard.offsetWidth;
@@ -171,15 +207,20 @@ function renderFavState() {
   }
 }
 
+function renderPrevBtn() {
+  // Poga ir aktīva ja vēsturē ir iepriekšēji joki
+  const hasPrev = state.history.length > 0 && state.historyPos > 0;
+  el.btnPrev.disabled = !hasPrev;
+  el.btnPrev.style.opacity = hasPrev ? '1' : '0.35';
+}
+
 function updateStatus() {
   const shown = state.shownIds.size;
   const total = state.allJokes.length;
   const found = state.filteredJokes.length;
   const favs  = state.favoriteIds.size;
   let text = `Redzēti: ${shown}/${total} • Atrasti: ${found} • Favorīti: ${favs}`;
-  if (state.mode === 'RESULTS')   text = 'Visi joki • ' + text;
-  if (state.mode === 'FAVORITES') text = 'Favorīti • ' + text;
-  if (state.mode === 'SETTINGS')  text = 'Iestatījumi • ' + text;
+  if (state.selectedCat) text = `[${state.selectedCat}] • ` + text;
   el.statusText.textContent = text;
 }
 
@@ -190,15 +231,57 @@ function switchMode(mode) {
   const isList     = mode === 'RESULTS' || mode === 'FAVORITES';
   const isSettings = mode === 'SETTINGS';
 
-  el.jokeCard.style.display       = isMain ? 'flex' : 'none';
-  el.primaryBar                   = $('primary-bar');
-  $('primary-bar').style.display  = isMain ? 'flex' : 'none';
+  el.jokeCard.style.display        = isMain ? 'flex' : 'none';
+  $('primary-bar').style.display   = isMain ? 'flex' : 'none';
   el.listContainer.classList.toggle('visible', isList);
   el.settingsContainer.classList.toggle('visible', isSettings);
-  el.btnBack.classList.toggle('visible', !isMain);
+  el.btnNavBack.classList.toggle('visible', !isMain);
 
-  if (isList) refreshList();
+  // Kategoriju filtrs redzams tikai saraksta skatā
+  el.catFilterWrap.style.display = isList ? 'block' : 'none';
+
+  if (isList) { buildCatChips(); refreshList(); }
   updateStatus();
+}
+
+// ── Category chips ────────────────────────────────────────────────────────
+function buildCatChips() {
+  el.catChips.innerHTML = '';
+
+  // "Visas" chips
+  const all = document.createElement('button');
+  all.className = 'cat-chip' + (!state.selectedCat ? ' selected' : '');
+  all.textContent = 'Visas';
+  all.dataset.cat = '';
+  all.addEventListener('click', () => selectCat(''));
+  el.catChips.appendChild(all);
+
+  // Kategorijas ar jokiem (tikai tās, kurās ir joki pašreizējā skatā)
+  const available = new Set(
+    (state.mode === 'FAVORITES'
+      ? state.allJokes.filter(j => state.favoriteIds.has(j.id))
+      : state.allJokes
+    ).map(j => j.cat)
+  );
+
+  CATEGORIES.forEach(cat => {
+    if (!available.has(cat)) return;
+    const btn = document.createElement('button');
+    btn.className = 'cat-chip' + (state.selectedCat === cat ? ' selected' : '');
+    btn.textContent = cat;
+    btn.dataset.cat = cat;
+    btn.addEventListener('click', () => selectCat(cat));
+    el.catChips.appendChild(btn);
+  });
+}
+
+function selectCat(cat) {
+  applyFilter(undefined, cat);
+  // Atjaunojam chip stāvokļus
+  el.catChips.querySelectorAll('.cat-chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.cat === cat);
+  });
+  haptic();
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
@@ -206,12 +289,12 @@ function refreshList() {
   let items = [];
   if (state.mode === 'RESULTS') {
     items = state.filteredJokes;
-    el.listTitle.textContent = 'Visi joki';
-  } else if (state.mode === 'FAVORITES') {
-    items = state.allJokes.filter(j => state.favoriteIds.has(j.id));
-    if (state.searchQuery.trim()) {
-      items = items.filter(j => matchesQuery(j.text, state.searchQuery));
-    }
+    el.listTitle.textContent = state.selectedCat ? state.selectedCat : 'Visi joki';
+  } else {
+    let favs = state.allJokes.filter(j => state.favoriteIds.has(j.id));
+    if (state.selectedCat) favs = favs.filter(j => j.cat === state.selectedCat);
+    if (state.searchQuery.trim()) favs = favs.filter(j => matchesQuery(j.text, state.searchQuery));
+    items = favs;
     el.listTitle.textContent = 'Saglabātie joki';
   }
 
@@ -220,11 +303,9 @@ function refreshList() {
   if (!items.length) {
     const empty = document.createElement('div');
     empty.id = 'list-empty';
-    if (state.mode === 'FAVORITES') {
-      empty.innerHTML = '<span class="empty-icon">⭐</span>Favorītu vēl nav. Acīmredzot standarti tev vēl nav nokritušies pietiekami zemu.';
-    } else {
-      empty.innerHTML = '<span class="empty-icon">🎤</span>Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini īsāku sakni vai citu vārdu.';
-    }
+    empty.innerHTML = state.mode === 'FAVORITES'
+      ? '<span class="empty-icon">⭐</span>Favorītu vēl nav vai neviena šajā kategorijā.'
+      : '<span class="empty-icon">🎤</span>Šajā kategorijā nekas neuzpeldēja.';
     el.listScroll.appendChild(empty);
     return;
   }
@@ -233,7 +314,7 @@ function refreshList() {
   items.forEach(joke => {
     const div = document.createElement('div');
     div.className = 'joke-item' + (state.favoriteIds.has(joke.id) ? ' fav' : '');
-    div.innerHTML = `<div class="joke-item-num">Joks #${joke.id}</div><div class="joke-item-text">${escHtml(joke.text)}</div>`;
+    div.innerHTML = `<div class="joke-item-num">Joks #${joke.id} · <span class="joke-item-cat">${escHtml(joke.cat||'')}</span></div><div class="joke-item-text">${escHtml(joke.text)}</div>`;
     div.addEventListener('click', () => {
       state.currentJoke = joke;
       renderJoke(joke, true);
@@ -251,34 +332,11 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── Filter ────────────────────────────────────────────────────────────────
-function applyFilter(query) {
-  state.searchQuery = query;
-  state.filteredJokes = query.trim()
-    ? state.allJokes.filter(j => matchesQuery(j.text, query))
-    : [...state.allJokes];
-
-  el.searchClear.classList.toggle('visible', query.length > 0);
-  el.btnResetSearch.classList.toggle('visible', query.length > 0);
-
-  if (!state.filteredJokes.length) {
-    el.jokeNumber.textContent = '';
-    el.jokeText.textContent = 'Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini īsāku sakni vai citu vārdu.';
-    renderFavState();
-  } else if (!state.filteredJokes.find(j => j.id === state.currentJoke?.id)) {
-    state.currentJoke = state.filteredJokes[0];
-    renderJoke(state.currentJoke, false);
-    saveLastJoke();
-  }
-  if (state.mode === 'RESULTS' || state.mode === 'FAVORITES') refreshList();
-  updateStatus();
-}
-
-// ── Random ────────────────────────────────────────────────────────────────
+// ── Random (ar vēsturi) ───────────────────────────────────────────────────
 function showRandom() {
   const pool = state.filteredJokes.filter(j => !state.shownIds.has(j.id));
   if (!pool.length) {
-    el.jokeText.textContent = 'Tu jau esi izsmēlis visu krājumu. Nospied atiestati un dari to sev atkal.';
+    el.jokeText.textContent = 'Tu jau esi izsmēlis visu krājumu. Nospied "Notīrīt" un dari to sev atkal.';
     el.jokeNumber.textContent = '';
     el.jokeCard.classList.remove('animate-in');
     void el.jokeCard.offsetWidth;
@@ -289,10 +347,32 @@ function showRandom() {
   state.shownIds.add(next.id);
   saveShown();
   state.currentJoke = next;
+
+  // Pievieno vēsturei (nogriež uz priekšu ja bija atgriezušies)
+  state.history = state.history.slice(0, state.historyPos + 1);
+  state.history.push(next.id);
+  if (state.history.length > 200) state.history.shift();
+  state.historyPos = state.history.length - 1;
+
   renderJoke(next, true);
   saveLastJoke();
   switchMode('MAIN');
   playSound();
+  haptic();
+  updateStatus();
+}
+
+// ── Atpakaļ (vēsturē) ─────────────────────────────────────────────────────
+function showPrev() {
+  if (state.historyPos <= 0) return;
+  state.historyPos--;
+  const id = state.history[state.historyPos];
+  const joke = state.allJokes.find(j => j.id === id);
+  if (!joke) return;
+  state.currentJoke = joke;
+  renderJoke(joke, true);
+  saveLastJoke();
+  playSound('nav');
   haptic();
   updateStatus();
 }
@@ -302,56 +382,31 @@ function toggleFavorite() {
   if (!state.currentJoke) return;
   const id = state.currentJoke.id;
   if (state.favoriteIds.has(id)) {
-    state.favoriteIds.delete(id);
-    showToast('Izņemts no favorītiem');
+    state.favoriteIds.delete(id); showToast('Izņemts no favorītiem');
   } else {
-    state.favoriteIds.add(id);
-    showToast('Pievienots favorītiem ★');
+    state.favoriteIds.add(id); showToast('Pievienots favorītiem ★');
   }
-  saveFavorites();
-  haptic();
-  renderFavState();
-  updateStatus();
+  saveFavorites(); haptic(); renderFavState(); updateStatus();
   if (state.mode === 'FAVORITES') refreshList();
 }
 
-// ── Donate ────────────────────────────────────────────────────────────────
-// iOS Safari safe external link opener
-function openLink(url) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
+// ── Modal ─────────────────────────────────────────────────────────────────
+function openModal(id)  { $(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeModal(id) { $(id).classList.remove('open'); document.body.style.overflow = ''; }
 
-function openModal(id) {
-  $(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeModal(id) {
-  $(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// ── Telegram send ─────────────────────────────────────────────────────────
+// ── Telegram ──────────────────────────────────────────────────────────────
 const BOT_TOKEN = '8779790699:AAFnA4UYn17yCiuKHvV2n0RWvHdxlk97f-U';
 const CHAT_ID   = '7575867937';
-
 async function sendTelegram(text) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-  const body = JSON.stringify({ chat_id: CHAT_ID, text });
-  const res = await fetch(url, {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body,
+    body: JSON.stringify({ chat_id: CHAT_ID, text }),
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);
 }
 
-// ── Sound chips setup ─────────────────────────────────────────────────────
+// ── Sound chips ───────────────────────────────────────────────────────────
 const SOUND_LABELS = [
   { key: 'sparkle',    label: '✨ Sparkle' },
   { key: 'click',      label: '🖱 Click' },
@@ -377,49 +432,45 @@ function buildSoundChips() {
     btn.textContent = label;
     btn.dataset.sound = key;
     btn.addEventListener('click', () => {
-      state.selectedSound = key;
-      saveSound();
+      state.selectedSound = key; saveSound();
       wrap.querySelectorAll('.sound-chip').forEach(c => c.classList.toggle('selected', c.dataset.sound === key));
-      playSound(key);
-      haptic();
+      playSound(key); haptic();
     });
     wrap.appendChild(btn);
   });
 }
 
-// ── Font size ─────────────────────────────────────────────────────────────
-function applyFontSize() {
-  el.jokeText.style.fontSize = state.fontSize + 'px';
-}
-
 // ── iOS hint ──────────────────────────────────────────────────────────────
 function maybeShowIosHint() {
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isStandalone = window.navigator.standalone;
-  const dismissed = LS.get('iosHintDismissed');
-  if (isIos && !isStandalone && !dismissed) {
+  if (isIos && !window.navigator.standalone && !LS.get('iosHintDismissed')) {
     setTimeout(() => el.iosHint.classList.add('show'), 3000);
   }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 function init() {
-  // Load jokes
   state.allJokes = JOKES_DATA;
-
-  // Load prefs
   const lastId = loadPrefs();
   state.filteredJokes = [...state.allJokes];
-  applyFontSize();
+  el.jokeText.style.fontSize = state.fontSize + 'px';
 
-  // Restore last joke
+  // Atjauno pēdējo joku
   let restored = false;
   if (lastId != null) {
     const found = state.allJokes.find(j => j.id === lastId);
-    if (found) { state.currentJoke = found; renderJoke(found, false); restored = true; }
+    if (found) {
+      state.currentJoke = found;
+      state.history = [found.id];
+      state.historyPos = 0;
+      renderJoke(found, false);
+      restored = true;
+    }
   }
   if (!restored && state.allJokes.length) {
     state.currentJoke = state.allJokes[0];
+    state.history = [state.allJokes[0].id];
+    state.historyPos = 0;
     renderJoke(state.currentJoke, false);
     saveLastJoke();
   }
@@ -428,16 +479,13 @@ function init() {
   switchMode('MAIN');
   updateStatus();
 
-  // Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
-
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   maybeShowIosHint();
 
-  // ── Event listeners ──────────────────────────────────────────────────
-  el.btnRandom.addEventListener('click', showRandom);
+  // ── Events ──────────────────────────────────────────────────────────────
 
+  el.btnRandom.addEventListener('click', showRandom);
+  el.btnPrev.addEventListener('click', showPrev);
   el.btnFavorite.addEventListener('click', toggleFavorite);
   el.btnStar.addEventListener('click', () => { switchMode('FAVORITES'); playSound('nav'); });
 
@@ -447,56 +495,44 @@ function init() {
     showToast('Redzēto saraksts notīrīts');
   });
   el.btnSettings.addEventListener('click', () => { switchMode('SETTINGS'); playSound('nav'); });
-  el.btnBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
+  el.btnNavBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
 
+  el.btnBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
   el.btnResetSearch.addEventListener('click', () => {
-    el.searchInput.value = ''; applyFilter(''); switchMode('MAIN');
+    el.searchInput.value = ''; applyFilter('', ''); switchMode('MAIN');
   });
-  el.searchClear.addEventListener('click', () => {
-    el.searchInput.value = ''; applyFilter('');
-  });
+  el.searchClear.addEventListener('click', () => { el.searchInput.value = ''; applyFilter(''); });
   el.searchInput.addEventListener('input', e => applyFilter(e.target.value));
 
   el.fontMinus.addEventListener('click', () => {
     state.fontSize = Math.max(14, state.fontSize - 2);
-    applyFontSize(); saveFontSize(); haptic();
+    el.jokeText.style.fontSize = state.fontSize + 'px'; saveFontSize(); haptic();
   });
   el.fontPlus.addEventListener('click', () => {
     state.fontSize = Math.min(32, state.fontSize + 2);
-    applyFontSize(); saveFontSize(); haptic();
+    el.jokeText.style.fontSize = state.fontSize + 'px'; saveFontSize(); haptic();
   });
 
-  // Donate button
   el.btnDonate.addEventListener('click', () => openModal('donate-modal'));
   el.btnDonateCancel.addEventListener('click', () => closeModal('donate-modal'));
   el.donateModal.addEventListener('click', e => { if (e.target === el.donateModal) closeModal('donate-modal'); });
-  el.btnBmc.addEventListener('click', () => {
-    closeModal('donate-modal'); openLink('https://buymeacoffee.com/ingmarsv');
-  });
-  el.btnRevolut.addEventListener('click', () => {
-    closeModal('donate-modal'); openLink('https://revolut.me/ingmars2v72');
-  });
-  el.btnPaypal.addEventListener('click', () => {
-    closeModal('donate-modal'); openLink('https://paypal.me/IngmarsVigners');
-  });
+  el.btnBmc.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://buymeacoffee.com/ingmarsv'); });
+  el.btnRevolut.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://revolut.me/ingmars2v72'); });
+  el.btnPaypal.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://paypal.me/IngmarsVigners'); });
 
-  // Contact button
   $('btn-contact').addEventListener('click', () => {
-    el.contactInput.value = '';
-    el.contactCounter.textContent = '0 / 500';
+    el.contactInput.value = ''; el.contactCounter.textContent = '0 / 500';
     openModal('contact-modal');
     setTimeout(() => el.contactInput.focus(), 300);
   });
   el.btnContactCancel.addEventListener('click', () => closeModal('contact-modal'));
   el.contactModal.addEventListener('click', e => { if (e.target === el.contactModal) closeModal('contact-modal'); });
-
   el.contactInput.addEventListener('input', () => {
     const len = el.contactInput.value.length;
     el.contactCounter.textContent = `${len} / 500`;
     el.contactCounter.style.color = len >= 480 ? '#e53935' : '#888';
     if (len > 500) el.contactInput.value = el.contactInput.value.slice(0, 500);
   });
-
   el.btnContactSend.addEventListener('click', async () => {
     const msg = el.contactInput.value.trim();
     if (!msg) { showToast('Ziņa ir tukša!'); return; }
@@ -504,8 +540,7 @@ function init() {
     el.btnContactSend.disabled = true;
     try {
       await sendTelegram(`[Sliktie joki PWA]\n${msg}`);
-      closeModal('contact-modal');
-      showToast('Ziņa nosūtīta! ✓');
+      closeModal('contact-modal'); showToast('Ziņa nosūtīta! ✓');
     } catch {
       showToast('Kļūda! Mēģini vēlreiz.');
     } finally {
@@ -514,29 +549,23 @@ function init() {
     }
   });
 
-  // Settings clear buttons
   $('btn-clear-favorites').addEventListener('click', () => {
-    state.favoriteIds.clear(); saveFavorites(); haptic(); updateStatus();
-    showToast('Favorīti notīrīti');
+    state.favoriteIds.clear(); saveFavorites(); haptic(); updateStatus(); showToast('Favorīti notīrīti');
   });
   $('btn-clear-shown').addEventListener('click', () => {
-    state.shownIds.clear(); saveShown(); haptic(); updateStatus();
-    showToast('Redzēto saraksts notīrīts');
+    state.shownIds.clear(); saveShown(); haptic(); updateStatus(); showToast('Redzēto saraksts notīrīts');
   });
   $('btn-clear-all').addEventListener('click', () => {
     state.shownIds.clear(); state.favoriteIds.clear();
     saveShown(); saveFavorites();
+    state.history = []; state.historyPos = -1;
     state.currentJoke = state.allJokes[0];
-    renderJoke(state.currentJoke, false);
-    saveLastJoke();
-    haptic(); switchMode('MAIN'); updateStatus();
-    showToast('Viss notīrīts');
+    renderJoke(state.currentJoke, false); saveLastJoke();
+    haptic(); switchMode('MAIN'); updateStatus(); showToast('Viss notīrīts');
   });
 
-  // iOS hint close
   el.iosHintClose.addEventListener('click', () => {
-    el.iosHint.classList.remove('show');
-    LS.set('iosHintDismissed', true);
+    el.iosHint.classList.remove('show'); LS.set('iosHintDismissed', true);
   });
 }
 

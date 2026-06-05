@@ -618,3 +618,74 @@ html, body {
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--outline); border-radius: 4px; }
+
+/* ── Category filter chips ───────────────────────────── */
+#cat-filter-wrap {
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+#cat-chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0 4px;
+}
+#cat-chips::-webkit-scrollbar { display: none; }
+.cat-chip {
+  background: var(--surface-chip);
+  border: 1.5px solid var(--outline);
+  border-radius: 20px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  -webkit-appearance: none;
+}
+.cat-chip.selected {
+  border-color: var(--brand);
+  background: rgba(255,179,0,0.12);
+  color: var(--brand);
+}
+.cat-chip:active { opacity: 0.75; }
+
+/* ── joke-item kategorijas badge ─────────────────────── */
+.joke-item-cat {
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* ── btn-prev (Pag' patin atpakaļ) ──────────────────── */
+#primary-bar {
+  display: flex;
+  gap: 8px;
+}
+#btn-prev {
+  background: none;
+  border: 2px solid var(--outline);
+  border-radius: var(--radius-btn);
+  height: 52px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0 12px;
+  flex-shrink: 0;
+  transition: border-color 0.12s, color 0.12s, opacity 0.15s;
+}
+#btn-prev:not(:disabled):active {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+#btn-random {
+  flex: 1;
+  min-width: 0;
+}
