@@ -597,29 +597,44 @@ html, body {
 /* ── Modal Overlay ───────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(0,0,0,0.6);
+  display: -webkit-flex;
   display: flex;
+  -webkit-align-items: flex-end;
   align-items: flex-end;
+  -webkit-justify-content: center;
   justify-content: center;
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
+  -webkit-transition: opacity 0.2s;
   transition: opacity 0.2s;
+  /* Android 8: visibility nodrošina ka klikšķi neiziet cauri */
+  visibility: hidden;
 }
 .modal-overlay.open {
   opacity: 1;
-  pointer-events: all;
+  pointer-events: auto;
+  visibility: visible;
 }
 .modal-sheet {
   width: 100%;
   max-width: 480px;
   padding-bottom: calc(var(--safe-bot) + 12px);
+  -webkit-transform: translateY(100%);
   transform: translateY(100%);
-  transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+  -webkit-transition: -webkit-transform 0.25s ease;
+  transition: transform 0.25s ease;
   border-radius: 20px 20px 0 0;
 }
-.modal-overlay.open .modal-sheet { transform: translateY(0); }
+.modal-overlay.open .modal-sheet {
+  -webkit-transform: translateY(0);
+  transform: translateY(0);
+}
 
 /* Donate modal */
 #donate-modal .modal-sheet {

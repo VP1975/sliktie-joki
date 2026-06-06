@@ -22,84 +22,68 @@ var SOUND_FILES = [
 var SOUND_LABELS = ['✨', '🥁', '🔔', '🎵', '💨'];
 var SOUND_NAV = 'sounds/joke_reveal.mp3';
 
-// ── AudioContext skaņu dzinējs (darbojas Android 8+, iOS, PC) ────────────
-// new Audio() ir neuzticams mobilajās ierīcēs bez user gesture.
-// AudioContext + decodeAudioData ir standarta risinājums visām platformām.
+// ── Skaņu dzinējs: AudioContext + new Audio() fallback ───────────────────
+// Stratēģija: mēģina AudioContext (Web Audio API) — darbojas visur.
+// Ja AudioContext nav (ļoti vecs pārlūks), izmanto new Audio() fallback.
+// Skaņas ielādē pēc PIRMĀ user gesture — tas ir obligāts nosacījums
+// visos mobilajos pārlūkos (autoplay policy).
 var audioCtx = null;
-var soundBuffers = {}; // ceļš -> AudioBuffer
+var soundBuffers = {};
 var audioUnlocked = false;
+var useAudioCtx = !!(window.AudioContext || window.webkitAudioContext);
 
 function getAudioCtx() {
   if (!audioCtx) {
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (AC) audioCtx = new AC();
-    } catch (e) {}
+    } catch (e) { useAudioCtx = false; }
   }
   return audioCtx;
 }
 
-// Ielādē vienu bufera
+function resumeCtx(ctx) {
+  if (ctx && ctx.state === 'suspended') {
+    try { ctx.resume(); } catch (e) {}
+  }
+}
+
 function loadBuffer(url, callback) {
   if (soundBuffers[url]) { if (callback) callback(soundBuffers[url]); return; }
   var ctx = getAudioCtx();
-  if (!ctx) return;
+  if (!ctx) { if (callback) callback(null); return; }
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.responseType = 'arraybuffer';
   xhr.onload = function() {
     try {
-      ctx.decodeAudioData(xhr.response, function(buf) {
-        soundBuffers[url] = buf;
-        if (callback) callback(buf);
-      }, function() {});
-    } catch (e) {}
+      ctx.decodeAudioData(xhr.response,
+        function(buf) { soundBuffers[url] = buf; if (callback) callback(buf); },
+        function() { soundBuffers[url] = null; if (callback) callback(null); }
+      );
+    } catch (e) { if (callback) callback(null); }
   };
-  xhr.onerror = function() {};
-  try { xhr.send(); } catch (e) {}
+  xhr.onerror = function() { if (callback) callback(null); };
+  try { xhr.send(); } catch (e) { if (callback) callback(null); }
 }
 
-// Preloādē visas skaņas (izsauc pēc pirmā lietotāja klikšķa)
+// Preloādē visas skaņas pēc pirmā user gesture
 function preloadSounds() {
   if (audioUnlocked) return;
   audioUnlocked = true;
+  if (!useAudioCtx) return; // fallback — ielādē lazily
   var ctx = getAudioCtx();
-  if (!ctx) return;
-  // iOS/Android: kontekstu jāatbloķē ar resume() pēc user gesture
-  if (ctx.state === 'suspended') {
-    try { ctx.resume(); } catch (e) {}
-  }
-  // Ielādēt visas 5 + nav skaņu
+  resumeCtx(ctx);
   var allFiles = SOUND_FILES.concat([SOUND_NAV]);
   for (var i = 0; i < allFiles.length; i++) {
     loadBuffer(allFiles[i]);
   }
 }
 
-// Atskaņo bufera (vai citu failu)
-function playSoundFile(url) {
-  var ctx = getAudioCtx();
-  if (!ctx) return;
-  if (ctx.state === 'suspended') {
-    try { ctx.resume(); } catch (e) {}
-  }
-  var buf = soundBuffers[url];
-  if (!buf) {
-    // Buferis vēl nav ielādēts — ielādē un atskaņo
-    loadBuffer(url, function(b) {
-      try {
-        var src = ctx.createBufferSource();
-        src.buffer = b;
-        var gain = ctx.createGain();
-        gain.gain.value = 0.7;
-        src.connect(gain);
-        gain.connect(ctx.destination);
-        src.start(0);
-      } catch (e) {}
-    });
-    return;
-  }
+// Atskaņo ar AudioContext
+function playViaCtx(buf, ctx) {
   try {
+    resumeCtx(ctx);
     var src = ctx.createBufferSource();
     src.buffer = buf;
     var gain = ctx.createGain();
@@ -108,6 +92,44 @@ function playSoundFile(url) {
     gain.connect(ctx.destination);
     src.start(0);
   } catch (e) {}
+}
+
+// Fallback: new Audio() — ielādē svaigi katru reizi (veciem pārlūkiem)
+function playViaAudio(url) {
+  try {
+    var a = new Audio(url);
+    a.volume = 0.7;
+    // Android 8: load() pirms play() palīdz
+    a.load();
+    var p = a.play();
+    if (p && p['catch']) p['catch'](function() {});
+  } catch (e) {}
+}
+
+function playSoundFile(url) {
+  if (!useAudioCtx) {
+    playViaAudio(url);
+    return;
+  }
+  var ctx = getAudioCtx();
+  if (!ctx) { playViaAudio(url); return; }
+  resumeCtx(ctx);
+
+  var buf = soundBuffers[url];
+  if (buf === null) {
+    // decodeAudioData neizdevās — fallback
+    playViaAudio(url);
+    return;
+  }
+  if (buf) {
+    playViaCtx(buf, ctx);
+    return;
+  }
+  // Vēl nav ielādēts — ielādē un atskaņo
+  loadBuffer(url, function(b) {
+    if (b) { playViaCtx(b, ctx); }
+    else   { playViaAudio(url); }
+  });
 }
 
 function playSound(overrideFile) {
@@ -267,15 +289,16 @@ function showToast(msg) {
 
 // ── External link ─────────────────────────────────────────────────────────
 function openLink(url) {
+  // Android 8: window.open() ir uzticamāks nekā a.click() ārpus tiešā click
   try {
-    var a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } catch (e) {}
+    var w = window.open(url, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') {
+      // Popup bloķēts — atveram pašā logā
+      window.location.href = url;
+    }
+  } catch (e) {
+    try { window.location.href = url; } catch (e2) {}
+  }
 }
 
 // ── HTML escape ───────────────────────────────────────────────────────────
@@ -978,16 +1001,16 @@ function init() {
     if (e.target === el.donateModal) closeModal('donate-modal');
   });
   on(el.btnBmc, 'click', function() {
-    closeModal('donate-modal');
     openLink('https://buymeacoffee.com/ingmarsv');
+    closeModal('donate-modal');
   });
   on(el.btnRevolut, 'click', function() {
-    closeModal('donate-modal');
     openLink('https://revolut.me/ingmars2v72');
+    closeModal('donate-modal');
   });
   on(el.btnPaypal, 'click', function() {
-    closeModal('donate-modal');
     openLink('https://paypal.me/IngmarsVigners');
+    closeModal('donate-modal');
   });
 
   on(el.iosHintClose, 'click', function() {
