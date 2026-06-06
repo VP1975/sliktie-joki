@@ -1,72 +1,101 @@
 'use strict';
 
-// ── Kategoriju saraksts ───────────────────────────────────────────────────
+// ── Kategoriju saraksts (identisks Android v2.3) ─────────────────────────
 const CATEGORIES = [
   "Absurdie joki","Attiecības","Bērni","Blondīnes","Citāti","Daba","Dakteri",
   "Geji","Kas kopīgs?","Laikmetīgie...","Matemātika","Nacisms",
   "Nederīgās lietas","Nekrofīli","Nezināmais Čaks","Nezināmie fakti",
-  "Pedofīli","Politika","Priesteri","Rasisms","Ratiņkrēsli","Runā ka...","Sekss",
-  "Senlatviešu dievības","Sievietes","Tautas gudrības","Vārdu spēles","Vecums","Veģetārieši"
+  "Pedofīli","Politika","Priesteri","Rasisms","Ratiņkrēsli","Runā ka...",
+  "Sekss","Senlatviešu dievības","Sievietes","Tautas gudrības",
+  "Vārdu spēles","Vecums","Veģetārieši"
 ];
+
+// ── Skaņas (5 skaņas identiskas Android v2.3: emoji chip + toggle) ────────
+// Android: soundIndex 1=sparkle,2=rimshot,3=chime,4=drum,5=whoosh
+const SOUND_FILES = [
+  'sounds/sound_1_sparkle.mp3',
+  'sounds/sound_2_rimshot.mp3',
+  'sounds/sound_3_chime.mp3',
+  'sounds/sound_4_drum.mp3',
+  'sounds/sound_5_whoosh.mp3',
+];
+const SOUND_LABELS = ['✨', '🥁', '🔔', '🎵', '💨'];
+const SOUND_NAV = 'sounds/joke_reveal.mp3';
 
 // ── State ─────────────────────────────────────────────────────────────────
 const state = {
-  allJokes: [],
-  filteredJokes: [],
-  shownIds: new Set(),
-  favoriteIds: new Set(),
-  currentJoke: null,
-  history: [],          // skatīto joku vēsture (random režīmā)
-  historyPos: -1,       // pašreizējā pozīcija vēsturē (-1 = jauns joks)
-  mode: 'MAIN',
-  fontSize: 20,
-  selectedSound: 'sparkle',
-  searchQuery: '',
-  selectedCat: '',      // aktīvā kategorija filtrā ('') = visi
+  allJokes:     [],
+  filteredJokes:[],
+  shownIds:     new Set(),
+  favoriteIds:  new Set(),
+  currentJoke:  null,
+  history:      [],   // id masīvs
+  historyPos:   -1,   // pozīcija vēsturē
+  mode:         'MAIN',
+  fontSize:     22,   // Android noklusējums 22sp
+  soundEnabled: true,
+  soundIndex:   0,    // 0-4 (atbilst SOUND_FILES indeksam)
+  searchQuery:  '',
+  selectedCat:  '',
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
-  jokeCard:          $('joke-card'),
-  statusText:        $('status-text'),
-  jokeNumber:        $('joke-number'),
-  jokeText:          $('joke-text'),
-  btnFavorite:       $('btn-favorite'),
-  btnResetSearch:    $('btn-reset-search'),
-  btnRandom:         $('btn-random'),
-  btnBack:           $('btn-back'),
-  btnPrev:           $('btn-prev'),
-  btnStar:           $('btn-star'),
-  navBar:            $('nav-bar'),
-  btnResults:        $('btn-results'),
-  btnResetShown:     $('btn-reset-shown'),
-  btnSettings:       $('btn-settings'),
-  btnNavBack:        $('btn-nav-back'),
-  listContainer:     $('list-container'),
-  listTitle:         $('list-title'),
-  listScroll:        $('list-scroll'),
-  catFilterWrap:     $('cat-filter-wrap'),
-  catSelect:         $('cat-select'),
-  settingsContainer: $('settings-container'),
-  searchInput:       $('search-input'),
-  searchClear:       $('search-clear'),
-  fontMinus:         $('font-minus'),
-  fontPlus:          $('font-plus'),
-  btnDonate:         $('btn-donate'),
-  toast:             $('toast'),
-  donateModal:       $('donate-modal'),
-  btnBmc:            $('btn-bmc'),
-  btnRevolut:        $('btn-revolut'),
-  btnPaypal:         $('btn-paypal'),
-  btnDonateCancel:   $('btn-donate-cancel'),
-  contactModal:      $('contact-modal'),
-  contactInput:      $('contact-input'),
-  contactCounter:    $('contact-counter'),
-  btnContactSend:    $('btn-contact-send'),
-  btnContactCancel:  $('btn-contact-cancel'),
-  iosHint:           $('ios-hint'),
-  iosHintClose:      $('ios-hint-close'),
+  headerBrand:         $('header-brand'),
+  btnDonate:           $('btn-donate'),
+  fontMinus:           $('font-minus'),
+  fontPlus:            $('font-plus'),
+  searchInput:         $('search-input'),
+  searchClear:         $('search-clear'),
+  statusText:          $('status-text'),
+  jokeCard:            $('joke-card'),
+  jokeNumber:          $('joke-number'),
+  jokeScroll:          $('joke-scroll'),
+  jokeText:            $('joke-text'),
+  btnFavorite:         $('btn-favorite'),
+  btnShare:            $('btn-share'),
+  btnResetSearch:      $('btn-reset-search'),
+  primaryBar:          $('primary-bar'),
+  btnPrev:             $('btn-prev'),
+  btnRandom:           $('btn-random'),
+  btnStar:             $('btn-star'),
+  navBar:              $('nav-bar'),
+  btnResults:          $('btn-results'),
+  btnNavFavorites:     $('btn-nav-favorites'),
+  btnResetShown:       $('btn-reset-shown'),
+  btnSettings:         $('btn-settings'),
+  btnBack:             $('btn-back'),
+  listContainer:       $('list-container'),
+  listTitle:           $('list-title'),
+  catFilterWrap:       $('cat-filter-wrap'),
+  catSelect:           $('cat-select'),
+  btnClearFavsInline:  $('btn-clear-favs-inline'),
+  listEmpty:           $('list-empty'),
+  listScroll:          $('list-scroll'),
+  settingsContainer:   $('settings-container'),
+  fontSizeLabel:       $('font-size-label'),
+  fontMinusSettings:   $('font-minus-settings'),
+  fontPlusSettings:    $('font-plus-settings'),
+  btnSoundToggle:      $('btn-sound-toggle'),
+  soundChips:          $('sound-chips'),
+  btnClearFavorites:   $('btn-clear-favorites'),
+  btnClearShown:       $('btn-clear-shown'),
+  btnClearAll:         $('btn-clear-all'),
+  btnContact:          $('btn-contact'),
+  donateModal:         $('donate-modal'),
+  btnBmc:              $('btn-bmc'),
+  btnRevolut:          $('btn-revolut'),
+  btnPaypal:           $('btn-paypal'),
+  btnDonateCancel:     $('btn-donate-cancel'),
+  contactModal:        $('contact-modal'),
+  contactInput:        $('contact-input'),
+  contactCounter:      $('contact-counter'),
+  btnContactSend:      $('btn-contact-send'),
+  btnContactCancel:    $('btn-contact-cancel'),
+  iosHint:             $('ios-hint'),
+  iosHintClose:        $('ios-hint-close'),
+  toast:               $('toast'),
 };
 
 // ── Persistence ───────────────────────────────────────────────────────────
@@ -76,19 +105,22 @@ const LS = {
 };
 
 function loadPrefs() {
-  state.shownIds    = new Set(LS.get('shownIds') || []);
+  state.shownIds    = new Set(LS.get('shownIds')    || []);
   state.favoriteIds = new Set(LS.get('favoriteIds') || []);
-  state.fontSize    = LS.get('fontSize') || 20;
-  state.selectedSound = LS.get('selectedSound') || 'sparkle';
+  state.fontSize    = LS.get('font_size_sp') ?? 22;
+  state.soundEnabled= LS.get('sound_enabled') !== false; // default true
+  state.soundIndex  = (LS.get('sound_index') ?? 1) - 1; // Android saves 1-based
+  if (state.soundIndex < 0 || state.soundIndex > 4) state.soundIndex = 0;
   return LS.get('lastJokeId');
 }
-function saveShown()     { LS.set('shownIds', [...state.shownIds]); }
-function saveFavorites() { LS.set('favoriteIds', [...state.favoriteIds]); }
-function saveLastJoke()  { if (state.currentJoke) LS.set('lastJokeId', state.currentJoke.id); }
-function saveFontSize()  { LS.set('fontSize', state.fontSize); }
-function saveSound()     { LS.set('selectedSound', state.selectedSound); }
+function saveShown()      { LS.set('shownIds', [...state.shownIds]); }
+function saveFavorites()  { LS.set('favoriteIds', [...state.favoriteIds]); }
+function saveLastJoke()   { if (state.currentJoke) LS.set('lastJokeId', state.currentJoke.id); }
+function saveFontSize()   { LS.set('font_size_sp', state.fontSize); }
+function saveSoundEnabled(){ LS.set('sound_enabled', state.soundEnabled); }
+function saveSoundIndex() { LS.set('sound_index', state.soundIndex + 1); } // Android saves 1-based
 
-// ── Search / Stem ─────────────────────────────────────────────────────────
+// ── Latvian search (identisks Android TextSearchUtils) ────────────────────
 function normalizeLv(s) {
   if (!s) return '';
   return s.toLowerCase()
@@ -108,40 +140,35 @@ function stem(word) {
   return w;
 }
 function matchesQuery(jokeText, query) {
-  if (!query.trim()) return true;
-  const qs = normalizeLv(query).split(' ').map(w => stem(w)).filter(w => w.length >= 2);
-  if (!qs.length) return true;
-  const norm = normalizeLv(jokeText);
-  return qs.every(s => norm.includes(s));
+  if (!query) return true;
+  // Atbalsta | (VAI) kā Android
+  const parts = query.split('|').map(p => p.trim()).filter(Boolean);
+  if (!parts.length) return true;
+  return parts.some(part => {
+    const qs = normalizeLv(part).split(' ').map(w => stem(w)).filter(w => w.length >= 2);
+    if (!qs.length) return true;
+    const norm = normalizeLv(jokeText);
+    return qs.every(s => norm.includes(s));
+  });
 }
 
-// ── Audio ─────────────────────────────────────────────────────────────────
-const SOUNDS = {
-  'sparkle':    'sound_1_sparkle.mp3',
-  'click':      'sound_2_click.mp3',
-  'rimshot':    'sound_2_rimshot.mp3',
-  'typewriter': 'sound_2_typewriter.mp3',
-  'boing':      'sound_3_boing.mp3',
-  'chime':      'sound_3_chime.mp3',
-  'laser':      'sound_3_laser.mp3',
-  'rise':       'sound_3_rise.mp3',
-  'ding':       'sound_4_ding.mp3',
-  'drum':       'sound_4_drum.mp3',
-  'pop':        'sound_4_pop.mp3',
-  'whoosh':     'sound_5_whoosh.mp3',
-  'nav':        'joke_reveal.mp3',
-  'off':        null,
-};
-function playSound(key) {
-  const src = SOUNDS[key !== undefined ? key : state.selectedSound];
+// ── Audio ──────────────────────────────────────────────────────────────────
+function playSound(overrideFile) {
+  if (!state.soundEnabled && !overrideFile) return;
+  const src = overrideFile || SOUND_FILES[state.soundIndex];
   if (!src) return;
-  try { const a = new Audio(src); a.volume = 0.7; a.play().catch(() => {}); } catch {}
+  try {
+    const a = new Audio(src);
+    a.volume = 0.7;
+    a.play().catch(() => {});
+  } catch {}
 }
+function playSoundNav() { playSound(SOUND_NAV); }
 
 // ── Haptic ────────────────────────────────────────────────────────────────
-function haptic() { try { navigator.vibrate?.(12); } catch {} }
+function haptic(duration) { try { navigator.vibrate?.(duration || 12); } catch {} }
 
-// ── Toast ─────────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────
 let toastTimer = null;
 function showToast(msg) {
   el.toast.textContent = msg;
@@ -150,17 +177,23 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.toast.classList.remove('show'), 2200);
 }
 
-// ── Open external link (iOS Safari safe) ──────────────────────────────────
+// ── External link ─────────────────────────────────────────────────────────
 function openLink(url) {
   const a = document.createElement('a');
   a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// ── Filter (search + category) ────────────────────────────────────────────
+// ── HTML escape ───────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────
 function applyFilter(query, cat) {
   if (query !== undefined) state.searchQuery = query;
-  if (cat !== undefined)   state.selectedCat = cat;
+  if (cat   !== undefined) state.selectedCat = cat;
 
   state.filteredJokes = state.allJokes.filter(j => {
     const catOk = !state.selectedCat || j.cat === state.selectedCat;
@@ -169,11 +202,14 @@ function applyFilter(query, cat) {
   });
 
   el.searchClear.classList.toggle('visible', state.searchQuery.length > 0);
-  el.btnResetSearch.classList.toggle('visible', state.searchQuery.length > 0 || state.selectedCat !== '');
+  el.btnResetSearch.classList.toggle(
+    'visible',
+    state.searchQuery.length > 0 || state.selectedCat !== ''
+  );
 
   if (!state.filteredJokes.length) {
     el.jokeNumber.textContent = '';
-    el.jokeText.textContent = 'Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini citu vārdu vai kategoriju.';
+    el.jokeText.textContent = 'Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini īsāku sakni vai | starp vārdiem.';
   } else if (!state.filteredJokes.find(j => j.id === state.currentJoke?.id)) {
     state.currentJoke = state.filteredJokes[0];
     renderJoke(state.currentJoke, false);
@@ -184,10 +220,14 @@ function applyFilter(query, cat) {
   updateStatus();
 }
 
-// ── Render ────────────────────────────────────────────────────────────────
+// ── Render joke ───────────────────────────────────────────────────────────
 function renderJoke(joke, animate) {
   if (!joke) return;
-  el.jokeNumber.textContent = `Joks #${joke.id}  ·  ${joke.cat || ''}`;
+  // "Joks #ID · kategorija" — identisks Android txt_joke_number_cat
+  const numText = joke.cat
+    ? `Joks #${joke.id} · ${joke.cat}`
+    : `Joks #${joke.id}`;
+  el.jokeNumber.textContent = numText;
   el.jokeText.textContent = joke.text;
   el.jokeText.style.fontSize = state.fontSize + 'px';
   renderFavState();
@@ -197,6 +237,8 @@ function renderJoke(joke, animate) {
     void el.jokeCard.offsetWidth;
     el.jokeCard.classList.add('animate-in');
   }
+  // Scroll karte uz sākumu
+  el.jokeScroll.scrollTop = 0;
 }
 
 function renderFavState() {
@@ -208,7 +250,6 @@ function renderFavState() {
 }
 
 function renderPrevBtn() {
-  // Poga ir aktīva ja vēsturē ir iepriekšēji joki
   const hasPrev = state.history.length > 0 && state.historyPos > 0;
   el.btnPrev.disabled = !hasPrev;
   el.btnPrev.style.opacity = hasPrev ? '1' : '0.35';
@@ -217,34 +258,86 @@ function renderPrevBtn() {
 function updateStatus() {
   const shown = state.shownIds.size;
   const total = state.allJokes.length;
-  const found = state.filteredJokes.length;
-  const favs  = state.favoriteIds.size;
-  let text = `Redzēti: ${shown}/${total} • Atrasti: ${found} • Favorīti: ${favs}`;
-  if (state.selectedCat) text = `[${state.selectedCat}] • ` + text;
-  el.statusText.textContent = text;
+  el.statusText.textContent = `Redzēti: ${shown} / ${total}`;
+}
+
+// ── Sound chips (5 emoji identisks Android) ───────────────────────────────
+function buildSoundChips() {
+  el.soundChips.innerHTML = '';
+  SOUND_LABELS.forEach((label, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'sound-chip' + (state.soundIndex === idx ? ' selected' : '');
+    btn.textContent = label;
+    btn.setAttribute('aria-label', label);
+    btn.addEventListener('click', () => {
+      state.soundIndex = idx;
+      saveSoundIndex();
+      el.soundChips.querySelectorAll('.sound-chip')
+        .forEach((c, i) => c.classList.toggle('selected', i === idx));
+      if (state.soundEnabled) playSound(SOUND_FILES[idx]);
+      haptic();
+    });
+    el.soundChips.appendChild(btn);
+  });
+}
+
+function renderSoundToggle() {
+  el.btnSoundToggle.textContent = state.soundEnabled
+    ? '🔊 Skaņa: ieslēgta'
+    : '🔇 Skaņa: izslēgta';
+}
+
+function renderFontLabel() {
+  el.fontSizeLabel.textContent = `Fonta izmērs: ${state.fontSize} sp`;
 }
 
 // ── Mode switching ────────────────────────────────────────────────────────
 function switchMode(mode) {
   state.mode = mode;
   const isMain     = mode === 'MAIN';
-  const isList     = mode === 'RESULTS' || mode === 'FAVORITES';
+  const isResults  = mode === 'RESULTS';
+  const isFavorites= mode === 'FAVORITES';
+  const isList     = isResults || isFavorites;
   const isSettings = mode === 'SETTINGS';
 
+  // Joke card + primary bar
   el.jokeCard.style.display        = isMain ? 'flex' : 'none';
-  $('primary-bar').style.display   = isMain ? 'flex' : 'none';
+  el.primaryBar.style.display      = isMain ? 'flex' : 'none';
+
+  // List container
   el.listContainer.classList.toggle('visible', isList);
+
+  // Settings
   el.settingsContainer.classList.toggle('visible', isSettings);
-  el.btnNavBack.classList.toggle('visible', !isMain);
 
-  // Kategoriju filtrs redzams tikai saraksta skatā
-  el.catFilterWrap.style.display = isList ? 'block' : 'none';
+  // Back button (redzams sarakstā un iestatījumos)
+  el.btnBack.classList.toggle('visible', !isMain);
 
-  if (isList) { buildCatSelect(); refreshList(); }
+  // Kategoriju dropdown — tikai RESULTS skatā, zem list title
+  el.catFilterWrap.classList.toggle('visible', isResults);
+
+  // "Notīrīt favorītus" inline — tikai FAVORITES skatā
+  el.btnClearFavsInline.classList.toggle('visible', isFavorites);
+
+  // Nav pogu aktīvie stāvokļi
+  el.btnResults.classList.toggle('active', isResults);
+  el.btnNavFavorites.classList.toggle('active', isFavorites);
+  el.btnSettings.classList.toggle('active', isSettings);
+  el.btnStar.classList.toggle('active', isFavorites);
+
+  if (isList) {
+    buildCatSelect();
+    refreshList();
+  }
+  if (isSettings) {
+    buildSoundChips();
+    renderSoundToggle();
+    renderFontLabel();
+  }
   updateStatus();
 }
 
-// ── Category select (dropdown) ───────────────────────────────────────────
+// ── Category select ───────────────────────────────────────────────────────
 function buildCatSelect() {
   const sel = el.catSelect;
   sel.innerHTML = '';
@@ -254,40 +347,32 @@ function buildCatSelect() {
   allOpt.textContent = 'Visas kategorijas';
   sel.appendChild(allOpt);
 
-  const available = new Set(
-    (state.mode === 'FAVORITES'
-      ? state.allJokes.filter(j => state.favoriteIds.has(j.id))
-      : state.allJokes
-    ).map(j => j.cat)
-  );
+  const sourceJokes = state.mode === 'FAVORITES'
+    ? state.allJokes.filter(j => state.favoriteIds.has(j.id))
+    : state.allJokes;
+  const available = new Set(sourceJokes.map(j => j.cat).filter(Boolean));
 
   CATEGORIES.forEach(cat => {
     if (!available.has(cat)) return;
+    const count = sourceJokes.filter(j => j.cat === cat).length;
     const opt = document.createElement('option');
     opt.value = cat;
-    const count = state.allJokes.filter(j => j.cat === cat &&
-      (state.mode !== 'FAVORITES' || state.favoriteIds.has(j.id))).length;
-    opt.textContent = cat + ' (' + count + ')';
+    opt.textContent = `${cat} (${count})`;
     sel.appendChild(opt);
   });
 
   sel.value = state.selectedCat;
 }
 
-function selectCat(cat) {
-  applyFilter(undefined, cat);
-  haptic();
-}
-
-// ── List ──────────────────────────────────────────────────────────────────
+// ── List refresh ──────────────────────────────────────────────────────────
 function refreshList() {
   let items = [];
   if (state.mode === 'RESULTS') {
     items = state.filteredJokes;
-    el.listTitle.textContent = state.selectedCat ? state.selectedCat : 'Visi joki';
+    el.listTitle.textContent = state.selectedCat || 'Visi joki';
   } else {
     let favs = state.allJokes.filter(j => state.favoriteIds.has(j.id));
-    if (state.selectedCat) favs = favs.filter(j => j.cat === state.selectedCat);
+    if (state.selectedCat)      favs = favs.filter(j => j.cat === state.selectedCat);
     if (state.searchQuery.trim()) favs = favs.filter(j => matchesQuery(j.text, state.searchQuery));
     items = favs;
     el.listTitle.textContent = 'Saglabātie joki';
@@ -296,26 +381,30 @@ function refreshList() {
   el.listScroll.innerHTML = '';
 
   if (!items.length) {
-    const empty = document.createElement('div');
-    empty.id = 'list-empty';
-    empty.innerHTML = state.mode === 'FAVORITES'
-      ? '<span class="empty-icon">⭐</span>Favorītu vēl nav vai neviena šajā kategorijā.'
-      : '<span class="empty-icon">🎤</span>Šajā kategorijā nekas neuzpeldēja.';
-    el.listScroll.appendChild(empty);
+    el.listEmpty.classList.add('visible');
+    el.listEmpty.textContent = state.mode === 'FAVORITES'
+      ? '☆ Nav saglabātu favorītu. Piespiedi ☆ pie joka, lai to pievienotu šeit.'
+      : 'Šajā kategorijā nekas neuzpeldēja.';
     return;
   }
+  el.listEmpty.classList.remove('visible');
 
   const frag = document.createDocumentFragment();
   items.forEach(joke => {
     const div = document.createElement('div');
     div.className = 'joke-item' + (state.favoriteIds.has(joke.id) ? ' fav' : '');
-    div.innerHTML = `<div class="joke-item-num">Joks #${joke.id} · <span class="joke-item-cat">${escHtml(joke.cat||'')}</span></div><div class="joke-item-text">${escHtml(joke.text)}</div>`;
+    const catSpan = joke.cat ? ` · <span class="joke-item-cat">${escHtml(joke.cat)}</span>` : '';
+    div.innerHTML =
+      `<div class="joke-item-num">Joks #${joke.id}${catSpan}</div>` +
+      `<div class="joke-item-text">${escHtml(joke.text)}</div>`;
     div.addEventListener('click', () => {
       state.currentJoke = joke;
       renderJoke(joke, true);
       saveLastJoke();
+      state.selectedCat = '';
+      applyFilter(undefined, '');
       switchMode('MAIN');
-      playSound('nav');
+      playSoundNav();
       haptic();
     });
     frag.appendChild(div);
@@ -323,15 +412,11 @@ function refreshList() {
   el.listScroll.appendChild(frag);
 }
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
 // ── Random (ar vēsturi) ───────────────────────────────────────────────────
 function showRandom() {
   const pool = state.filteredJokes.filter(j => !state.shownIds.has(j.id));
   if (!pool.length) {
-    el.jokeText.textContent = 'Tu jau esi izsmēlis visu krājumu. Nospied "Notīrīt" un dari to sev atkal.';
+    el.jokeText.textContent = 'Izsmēlis visu krājumu. Nospied "Atjaunot" un sāc no jauna.';
     el.jokeNumber.textContent = '';
     el.jokeCard.classList.remove('animate-in');
     void el.jokeCard.offsetWidth;
@@ -351,7 +436,7 @@ function showRandom() {
 
   renderJoke(next, true);
   saveLastJoke();
-  switchMode('MAIN');
+  if (state.mode !== 'MAIN') switchMode('MAIN');
   playSound();
   haptic();
   updateStatus();
@@ -367,7 +452,7 @@ function showPrev() {
   state.currentJoke = joke;
   renderJoke(joke, true);
   saveLastJoke();
-  playSound('nav');
+  playSoundNav();
   haptic();
   updateStatus();
 }
@@ -377,17 +462,49 @@ function toggleFavorite() {
   if (!state.currentJoke) return;
   const id = state.currentJoke.id;
   if (state.favoriteIds.has(id)) {
-    state.favoriteIds.delete(id); showToast('Izņemts no favorītiem');
+    state.favoriteIds.delete(id);
+    showToast('Izņemts no favorītiem');
   } else {
-    state.favoriteIds.add(id); showToast('Pievienots favorītiem ★');
+    state.favoriteIds.add(id);
+    showToast('Pievienots favorītiem ★');
   }
-  saveFavorites(); haptic(); renderFavState(); updateStatus();
+  saveFavorites();
+  haptic();
+  renderFavState();
+  updateStatus();
   if (state.mode === 'FAVORITES') refreshList();
 }
 
+// ── Share ─────────────────────────────────────────────────────────────────
+function shareJoke() {
+  if (!state.currentJoke) return;
+  const text = `Joks #${state.currentJoke.id}\n${state.currentJoke.text}\n\n— Sliktie joki 30+`;
+  if (navigator.share) {
+    navigator.share({ title: 'Sliktais joks', text }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(text).then(() => showToast('Nokopēts!'));
+  }
+  haptic();
+}
+
+// ── Font size ─────────────────────────────────────────────────────────────
+function changeFontSize(delta) {
+  state.fontSize = Math.max(14, Math.min(32, state.fontSize + delta));
+  el.jokeText.style.fontSize = state.fontSize + 'px';
+  saveFontSize();
+  renderFontLabel();
+  haptic();
+}
+
 // ── Modal ─────────────────────────────────────────────────────────────────
-function openModal(id)  { $(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
-function closeModal(id) { $(id).classList.remove('open'); document.body.style.overflow = ''; }
+function openModal(id)  {
+  $(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  $(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
 
 // ── Telegram ──────────────────────────────────────────────────────────────
 const BOT_TOKEN = '8779790699:AAFnA4UYn17yCiuKHvV2n0RWvHdxlk97f-U';
@@ -401,44 +518,12 @@ async function sendTelegram(text) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
 }
 
-// ── Sound chips ───────────────────────────────────────────────────────────
-const SOUND_LABELS = [
-  { key: 'sparkle',    label: '✨ Sparkle' },
-  { key: 'click',      label: '🖱 Click' },
-  { key: 'rimshot',    label: '🥁 Rimshot' },
-  { key: 'typewriter', label: '⌨️ Typewriter' },
-  { key: 'boing',      label: '🎈 Boing' },
-  { key: 'chime',      label: '🔔 Chime' },
-  { key: 'laser',      label: '🔫 Laser' },
-  { key: 'rise',       label: '📈 Rise' },
-  { key: 'ding',       label: '🔔 Ding' },
-  { key: 'drum',       label: '🥁 Drum' },
-  { key: 'pop',        label: '🎆 Pop' },
-  { key: 'whoosh',     label: '💨 Whoosh' },
-  { key: 'off',        label: '🔇 Izslēgt' },
-];
-
-function buildSoundChips() {
-  const wrap = $('sound-chips');
-  wrap.innerHTML = '';
-  SOUND_LABELS.forEach(({ key, label }) => {
-    const btn = document.createElement('button');
-    btn.className = 'sound-chip' + (state.selectedSound === key ? ' selected' : '');
-    btn.textContent = label;
-    btn.dataset.sound = key;
-    btn.addEventListener('click', () => {
-      state.selectedSound = key; saveSound();
-      wrap.querySelectorAll('.sound-chip').forEach(c => c.classList.toggle('selected', c.dataset.sound === key));
-      playSound(key); haptic();
-    });
-    wrap.appendChild(btn);
-  });
-}
-
 // ── iOS hint ──────────────────────────────────────────────────────────────
 function maybeShowIosHint() {
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  if (isIos && !window.navigator.standalone && !LS.get('iosHintDismissed')) {
+  const ua = navigator.userAgent;
+  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isSafari = /safari/i.test(ua) && !/chrome|chromium|crios/i.test(ua);
+  if (isIos && isSafari && !window.navigator.standalone && !LS.get('iosHintDismissed')) {
     setTimeout(() => el.iosHint.classList.add('show'), 3000);
   }
 }
@@ -470,68 +555,171 @@ function init() {
     saveLastJoke();
   }
 
-  buildSoundChips();
   switchMode('MAIN');
   updateStatus();
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   maybeShowIosHint();
 
   // ── Events ──────────────────────────────────────────────────────────────
 
+  // Header brand → MAIN (v2.3 jaunums)
+  el.headerBrand.addEventListener('click', () => {
+    if (state.mode !== 'MAIN') {
+      state.selectedCat = '';
+      applyFilter(undefined, '');
+      switchMode('MAIN');
+      playSoundNav();
+      haptic();
+    }
+  });
+
+  // Fonta pogas headerā
+  el.fontMinus.addEventListener('click', () => changeFontSize(-2));
+  el.fontPlus.addEventListener('click',  () => changeFontSize(+2));
+
+  // Search
+  el.searchInput.addEventListener('input', e => applyFilter(e.target.value));
+  el.searchClear.addEventListener('click', () => {
+    el.searchInput.value = '';
+    applyFilter('');
+  });
+  el.btnResetSearch.addEventListener('click', () => {
+    el.searchInput.value = '';
+    state.selectedCat = '';
+    applyFilter('', '');
+    switchMode('MAIN');
+  });
+
+  // Joke card actions
+  el.btnFavorite.addEventListener('click', toggleFavorite);
+  el.btnShare.addEventListener('click', shareJoke);
+
+  // Primary bar
   el.btnRandom.addEventListener('click', showRandom);
   el.btnPrev.addEventListener('click', showPrev);
-  el.btnFavorite.addEventListener('click', toggleFavorite);
-  el.btnStar.addEventListener('click', () => { switchMode('FAVORITES'); playSound('nav'); });
+  el.btnStar.addEventListener('click', () => {
+    state.selectedCat = '';
+    switchMode('FAVORITES');
+    playSoundNav();
+    haptic();
+  });
 
+  // Nav bar
   el.btnResults.addEventListener('click', () => {
     state.selectedCat = '';
     applyFilter(undefined, '');
     switchMode('RESULTS');
-    playSound('nav');
+    playSoundNav();
+    haptic();
+  });
+  el.btnNavFavorites.addEventListener('click', () => {
+    state.selectedCat = '';
+    switchMode('FAVORITES');
+    playSoundNav();
+    haptic();
   });
   el.btnResetShown.addEventListener('click', () => {
-    state.shownIds.clear(); saveShown(); haptic(); updateStatus();
+    state.shownIds.clear();
+    saveShown();
+    haptic();
+    updateStatus();
     showToast('Redzēto saraksts notīrīts');
   });
-  el.btnSettings.addEventListener('click', () => { switchMode('SETTINGS'); playSound('nav'); });
-  el.btnNavBack.addEventListener('click', () => {
+  el.btnSettings.addEventListener('click', () => {
+    switchMode('SETTINGS');
+    playSoundNav();
+    haptic();
+  });
+
+  // Atpakaļ poga
+  el.btnBack.addEventListener('click', () => {
     state.selectedCat = '';
     applyFilter(undefined, '');
     switchMode('MAIN');
-    playSound('nav');
+    playSoundNav();
+    haptic();
   });
 
-  el.btnBack.addEventListener('click', () => { switchMode('MAIN'); playSound('nav'); });
-  el.btnResetSearch.addEventListener('click', () => {
-    el.searchInput.value = ''; applyFilter('', ''); switchMode('MAIN');
-  });
-  el.searchClear.addEventListener('click', () => { el.searchInput.value = ''; applyFilter(''); });
-  el.searchInput.addEventListener('input', e => applyFilter(e.target.value));
-
-  el.fontMinus.addEventListener('click', () => {
-    state.fontSize = Math.max(14, state.fontSize - 2);
-    el.jokeText.style.fontSize = state.fontSize + 'px'; saveFontSize(); haptic();
-  });
-  el.fontPlus.addEventListener('click', () => {
-    state.fontSize = Math.min(32, state.fontSize + 2);
-    el.jokeText.style.fontSize = state.fontSize + 'px'; saveFontSize(); haptic();
+  // Kategoriju dropdown
+  el.catSelect.addEventListener('change', () => {
+    applyFilter(undefined, el.catSelect.value);
+    haptic();
   });
 
-  el.btnDonate.addEventListener('click', () => openModal('donate-modal'));
-  el.btnDonateCancel.addEventListener('click', () => closeModal('donate-modal'));
-  el.donateModal.addEventListener('click', e => { if (e.target === el.donateModal) closeModal('donate-modal'); });
-  el.btnBmc.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://buymeacoffee.com/ingmarsv'); });
-  el.btnRevolut.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://revolut.me/ingmars2v72'); });
-  el.btnPaypal.addEventListener('click', () => { closeModal('donate-modal'); openLink('https://paypal.me/IngmarsVigners'); });
+  // Notīrīt favorītus inline (FAVORĪTI skatā)
+  el.btnClearFavsInline.addEventListener('click', () => {
+    if (!confirm('Dzēst visus favorītus?')) return;
+    state.favoriteIds.clear();
+    saveFavorites();
+    haptic();
+    updateStatus();
+    refreshList();
+    showToast('Favorīti notīrīti');
+  });
 
-  $('btn-contact').addEventListener('click', () => {
-    el.contactInput.value = ''; el.contactCounter.textContent = '0 / 500';
+  // Settings
+  el.fontMinusSettings.addEventListener('click', () => changeFontSize(-2));
+  el.fontPlusSettings.addEventListener('click',  () => changeFontSize(+2));
+
+  el.btnSoundToggle.addEventListener('click', () => {
+    state.soundEnabled = !state.soundEnabled;
+    saveSoundEnabled();
+    renderSoundToggle();
+    haptic();
+    if (state.soundEnabled) playSound();
+  });
+
+  el.btnClearFavorites.addEventListener('click', () => {
+    if (!confirm('Dzēst visus favorītus?')) return;
+    state.favoriteIds.clear();
+    saveFavorites();
+    haptic();
+    updateStatus();
+    showToast('Favorīti notīrīti');
+  });
+  el.btnClearShown.addEventListener('click', () => {
+    if (!confirm('Aizmirst visus redzētos jokus?')) return;
+    state.shownIds.clear();
+    saveShown();
+    haptic();
+    updateStatus();
+    showToast('Redzēto saraksts notīrīts');
+  });
+  el.btnClearAll.addEventListener('click', () => {
+    if (!confirm('Notīrīt visu saglabāto (redzēti + favorīti)?')) return;
+    state.shownIds.clear();
+    state.favoriteIds.clear();
+    saveShown();
+    saveFavorites();
+    state.history = [];
+    state.historyPos = -1;
+    if (state.allJokes.length) {
+      state.currentJoke = state.allJokes[0];
+      state.history = [state.allJokes[0].id];
+      state.historyPos = 0;
+      renderJoke(state.currentJoke, false);
+      saveLastJoke();
+    }
+    haptic();
+    switchMode('MAIN');
+    updateStatus();
+    showToast('Viss notīrīts');
+  });
+
+  // Kontakts
+  el.btnContact.addEventListener('click', () => {
+    el.contactInput.value = '';
+    el.contactCounter.textContent = '0 / 500';
     openModal('contact-modal');
     setTimeout(() => el.contactInput.focus(), 300);
   });
   el.btnContactCancel.addEventListener('click', () => closeModal('contact-modal'));
-  el.contactModal.addEventListener('click', e => { if (e.target === el.contactModal) closeModal('contact-modal'); });
+  el.contactModal.addEventListener('click', e => {
+    if (e.target === el.contactModal) closeModal('contact-modal');
+  });
   el.contactInput.addEventListener('input', () => {
     const len = el.contactInput.value.length;
     el.contactCounter.textContent = `${len} / 500`;
@@ -545,7 +733,8 @@ function init() {
     el.btnContactSend.disabled = true;
     try {
       await sendTelegram(`[Sliktie joki PWA]\n${msg}`);
-      closeModal('contact-modal'); showToast('Ziņa nosūtīta! ✓');
+      closeModal('contact-modal');
+      showToast('Ziņa nosūtīta! ✓');
     } catch {
       showToast('Kļūda! Mēģini vēlreiz.');
     } finally {
@@ -554,27 +743,29 @@ function init() {
     }
   });
 
-  $('btn-clear-favorites').addEventListener('click', () => {
-    state.favoriteIds.clear(); saveFavorites(); haptic(); updateStatus(); showToast('Favorīti notīrīti');
+  // Donate
+  el.btnDonate.addEventListener('click', () => openModal('donate-modal'));
+  el.btnDonateCancel.addEventListener('click', () => closeModal('donate-modal'));
+  el.donateModal.addEventListener('click', e => {
+    if (e.target === el.donateModal) closeModal('donate-modal');
   });
-  $('btn-clear-shown').addEventListener('click', () => {
-    state.shownIds.clear(); saveShown(); haptic(); updateStatus(); showToast('Redzēto saraksts notīrīts');
+  el.btnBmc.addEventListener('click', () => {
+    closeModal('donate-modal');
+    openLink('https://buymeacoffee.com/ingmarsv');
   });
-  $('btn-clear-all').addEventListener('click', () => {
-    state.shownIds.clear(); state.favoriteIds.clear();
-    saveShown(); saveFavorites();
-    state.history = []; state.historyPos = -1;
-    state.currentJoke = state.allJokes[0];
-    renderJoke(state.currentJoke, false); saveLastJoke();
-    haptic(); switchMode('MAIN'); updateStatus(); showToast('Viss notīrīts');
+  el.btnRevolut.addEventListener('click', () => {
+    closeModal('donate-modal');
+    openLink('https://revolut.me/ingmars2v72');
+  });
+  el.btnPaypal.addEventListener('click', () => {
+    closeModal('donate-modal');
+    openLink('https://paypal.me/IngmarsVigners');
   });
 
+  // iOS hint
   el.iosHintClose.addEventListener('click', () => {
-    el.iosHint.classList.remove('show'); LS.set('iosHintDismissed', true);
-  });
-
-  el.catSelect.addEventListener('change', () => {
-    selectCat(el.catSelect.value);
+    el.iosHint.classList.remove('show');
+    LS.set('iosHintDismissed', true);
   });
 }
 

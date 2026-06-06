@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Sliktie joki">
+  <meta name="apple-mobile-web-app-title" content="Sliktie joki 30+">
   <meta name="theme-color" content="#15131A">
   <meta name="description" content="Sausā humora izlase pieaugušajiem — 1353 joki">
   <title>Sliktie joki 30+</title>
@@ -17,7 +17,7 @@
 <body>
 <div id="app">
 
-  <!-- ── Header ──────────────────────────────────────── -->
+  <!-- ── Header: brand | donate centrā | A−/A+ labajā ── -->
   <div id="header">
     <span id="header-brand">SLIKTIE JOKI 30+</span>
     <button id="btn-donate">☕ GRIBĒŠU VĒL!</button>
@@ -27,78 +27,96 @@
     </div>
   </div>
 
-  <!-- ── Search ──────────────────────────────────────── -->
+  <!-- ── Search ── -->
   <div id="search-wrap">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg>
-    <input id="search-input" type="search" placeholder="Meklē pēc atslēgvārda..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <input id="search-input" type="search" placeholder="Meklē pēc vārda (| = VAI)" autocomplete="off" autocorrect="off" spellcheck="false">
     <button id="search-clear">✕</button>
   </div>
 
-  <!-- ── Joke Card ────────────────────────────────────── -->
+  <!-- ── Status teksts ── -->
+  <div id="status-text"></div>
+
+  <!-- ── Joke Card ── -->
   <div id="joke-card">
-    <div id="status-text"></div>
     <div id="joke-number"></div>
     <div id="joke-scroll">
       <div id="joke-text"></div>
     </div>
     <div id="card-actions">
       <button id="btn-favorite">☆ Saglabāt</button>
+      <button id="btn-share">Kopīgot</button>
       <div class="spacer"></div>
-      <button id="btn-reset-search">Notīrīt filtru</button>
-      <button id="btn-back" style="display:none"></button>
+      <button id="btn-reset-search">Notīrīt meklēšanu</button>
     </div>
   </div>
 
-  <!-- ── Primary Action Bar ───────────────────────────── -->
+  <!-- ── Primary Action Bar: prevButton | randomButton | ★ ── -->
   <div id="primary-bar">
-    <button id="btn-prev" disabled title="Atpakaļ">◀ Pag' patin atpakaļ</button>
-    <button id="btn-random">Iedod vēl vienu</button>
+    <button id="btn-prev" disabled>Pag' patin atpakaļ</button>
+    <button id="btn-random">Iedod vēl vienu slikto joku</button>
     <button id="btn-star">★</button>
   </div>
 
-  <!-- ── Nav Bar ──────────────────────────────────────── -->
+  <!-- ── Nav Bar ── -->
   <div id="nav-bar">
     <button class="nav-btn" id="btn-results">Visi joki</button>
-    <button class="nav-btn" id="btn-reset-shown">Notīrīt</button>
+    <button class="nav-btn" id="btn-nav-favorites">Favorīti</button>
+    <button class="nav-btn" id="btn-reset-shown">Atjaunot</button>
     <button class="nav-btn" id="btn-settings">Iestatījumi</button>
-    <button class="nav-btn" id="btn-nav-back">← Atpakaļ</button>
   </div>
 
-  <!-- ── Kategoriju dropdown (redzams tikai saraksta skatā) ── -->
-  <div id="cat-filter-wrap" style="display:none">
-    <select id="cat-select">
-      <option value="">Visas kategorijas</option>
-    </select>
-  </div>
+  <!-- ── Back button (redzams sarakstu un settings skatā) ── -->
+  <button id="btn-back">← Atpakaļ</button>
 
-  <!-- ── List Container ───────────────────────────────── -->
+  <!-- ── List Container (RESULTS / FAVORITES) ── -->
   <div id="list-container">
     <div id="list-title"></div>
+
+    <!-- Kategoriju dropdown — redzams tikai VISI JOKI skatā ── -->
+    <div id="cat-filter-wrap">
+      <select id="cat-select">
+        <option value="">Visas kategorijas</option>
+      </select>
+    </div>
+
+    <!-- Notīrīt favorītus inline poga — redzama tikai FAVORĪTI skatā ── -->
+    <button id="btn-clear-favs-inline">Notīrīt favorītus</button>
+
+    <div id="list-empty"></div>
     <div id="list-scroll"></div>
   </div>
 
-  <!-- ── Settings Container ───────────────────────────── -->
+  <!-- ── Settings Container ── -->
   <div id="settings-container">
     <div id="settings-title">Iestatījumi</div>
-    <div id="sound-section">
-      <div class="section-label">Skaņa</div>
-      <div id="sound-chips"></div>
+
+    <div class="settings-label" id="font-size-label">Fonta izmērs: 22 sp</div>
+    <div id="font-settings-row">
+      <button class="settings-btn outlined" id="font-minus-settings">A−</button>
+      <button class="settings-btn outlined" id="font-plus-settings">A+</button>
     </div>
-    <button class="settings-btn primary" id="btn-clear-favorites">Notīrīt favorītus</button>
-    <button class="settings-btn outlined" id="btn-clear-shown">Notīrīt parādītos</button>
+
+    <button class="settings-btn outlined" id="btn-sound-toggle">🔊 Skaņa: ieslēgta</button>
+
+    <div class="settings-label" id="sound-choose-label">Izvēlies skaņas efektu:</div>
+    <div id="sound-chips"></div>
+
+    <button class="settings-btn outlined" id="btn-clear-favorites">Notīrīt favorītus</button>
+    <button class="settings-btn outlined" id="btn-clear-shown">Notīrīt redzētos</button>
     <button class="settings-btn outlined" id="btn-clear-all">Notīrīt visu saglabāto</button>
-    <button class="settings-btn outlined" id="btn-contact">✉ Sazināties ar izstrādātāju</button>
+    <button class="settings-btn outlined" id="btn-contact">Sazinies ar izstrādātāju</button>
   </div>
 
 </div><!-- /#app -->
 
-<!-- ── Donate Modal ──────────────────────────────────── -->
+<!-- ── Donate Modal ── -->
 <div class="modal-overlay" id="donate-modal">
   <div class="modal-sheet">
-    <div id="donate-title">☕ GRIBĒŠU VĒL!</div>
-    <div id="donate-msg">Ja aplikācija priecē — dari arī mani priecīgu. Paldies!</div>
+    <div id="donate-title">Atbalsti izstrādātāju</div>
+    <div id="donate-msg">Ja aplikācija sniedz prieku, vari atbalstīt tās turpmāko attīstību ar brīvprātīgu ziedojumu.</div>
     <button class="donate-btn" id="btn-bmc">☕ Buy Me a Coffee</button>
     <button class="donate-btn" id="btn-revolut">💳 Revolut</button>
     <button class="donate-btn" id="btn-paypal">🅿 PayPal</button>
@@ -106,11 +124,11 @@
   </div>
 </div>
 
-<!-- ── Contact Modal ─────────────────────────────────── -->
+<!-- ── Contact Modal ── -->
 <div class="modal-overlay" id="contact-modal">
   <div class="modal-sheet">
     <div id="contact-title">Sazinies ar izstrādātāju</div>
-    <textarea id="contact-input" placeholder="Raksti šeit savu ziņu..." maxlength="500"></textarea>
+    <textarea id="contact-input" placeholder="Raksti šeit — atsauksmi vai ieteikumu…" maxlength="500"></textarea>
     <div id="contact-counter">0 / 500</div>
     <div id="contact-actions">
       <button id="btn-contact-cancel">Atcelt</button>
@@ -119,13 +137,13 @@
   </div>
 </div>
 
-<!-- ── iOS hint ───────────────────────────────────────── -->
+<!-- ── iOS add-to-home hint ── -->
 <div id="ios-hint">
   <button id="ios-hint-close">✕</button>
   Lai instalētu kā aplikāciju: nospied <strong>Dalīties</strong> (□↑) → <strong>Pievienot sākuma ekrānam</strong>
 </div>
 
-<!-- ── Toast ─────────────────────────────────────────── -->
+<!-- ── Toast ── -->
 <div id="toast"></div>
 
 <script src="jokes-data.js"></script>
