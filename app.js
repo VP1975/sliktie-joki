@@ -1,7 +1,7 @@
 'use strict';
 
-// ── Kategoriju saraksts (identisks Android v2.3) ─────────────────────────
-const CATEGORIES = [
+// ── Kategoriju saraksts ───────────────────────────────────────────────────
+var CATEGORIES = [
   "Absurdie joki","Attiecības","Bērni","Blondīnes","Citāti","Daba","Dakteri",
   "Geji","Kas kopīgs?","Laikmetīgie...","Matemātika","Nacisms",
   "Nederīgās lietas","Nekrofīli","Nezināmais Čaks","Nezināmie fakti",
@@ -10,117 +10,281 @@ const CATEGORIES = [
   "Vārdu spēles","Vecums","Veģetārieši"
 ];
 
-// ── Skaņas (5 skaņas identiskas Android v2.3: emoji chip + toggle) ────────
-// Android: soundIndex 1=sparkle,2=rimshot,3=chime,4=drum,5=whoosh
-const SOUND_FILES = [
+// ── Skaņas — 5 identiskas Android v2.3 ──────────────────────────────────
+// Index 0=sparkle, 1=rimshot, 2=chime, 3=drum, 4=whoosh
+var SOUND_FILES = [
   'sounds/sound_1_sparkle.mp3',
   'sounds/sound_2_rimshot.mp3',
   'sounds/sound_3_chime.mp3',
   'sounds/sound_4_drum.mp3',
-  'sounds/sound_5_whoosh.mp3',
+  'sounds/sound_5_whoosh.mp3'
 ];
-const SOUND_LABELS = ['✨', '🥁', '🔔', '🎵', '💨'];
-const SOUND_NAV = 'sounds/joke_reveal.mp3';
+var SOUND_LABELS = ['✨', '🥁', '🔔', '🎵', '💨'];
+var SOUND_NAV = 'sounds/joke_reveal.mp3';
+
+// ── AudioContext skaņu dzinējs (darbojas Android 8+, iOS, PC) ────────────
+// new Audio() ir neuzticams mobilajās ierīcēs bez user gesture.
+// AudioContext + decodeAudioData ir standarta risinājums visām platformām.
+var audioCtx = null;
+var soundBuffers = {}; // ceļš -> AudioBuffer
+var audioUnlocked = false;
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    } catch (e) {}
+  }
+  return audioCtx;
+}
+
+// Ielādē vienu bufera
+function loadBuffer(url, callback) {
+  if (soundBuffers[url]) { if (callback) callback(soundBuffers[url]); return; }
+  var ctx = getAudioCtx();
+  if (!ctx) return;
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.responseType = 'arraybuffer';
+  xhr.onload = function() {
+    try {
+      ctx.decodeAudioData(xhr.response, function(buf) {
+        soundBuffers[url] = buf;
+        if (callback) callback(buf);
+      }, function() {});
+    } catch (e) {}
+  };
+  xhr.onerror = function() {};
+  try { xhr.send(); } catch (e) {}
+}
+
+// Preloādē visas skaņas (izsauc pēc pirmā lietotāja klikšķa)
+function preloadSounds() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  var ctx = getAudioCtx();
+  if (!ctx) return;
+  // iOS/Android: kontekstu jāatbloķē ar resume() pēc user gesture
+  if (ctx.state === 'suspended') {
+    try { ctx.resume(); } catch (e) {}
+  }
+  // Ielādēt visas 5 + nav skaņu
+  var allFiles = SOUND_FILES.concat([SOUND_NAV]);
+  for (var i = 0; i < allFiles.length; i++) {
+    loadBuffer(allFiles[i]);
+  }
+}
+
+// Atskaņo bufera (vai citu failu)
+function playSoundFile(url) {
+  var ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    try { ctx.resume(); } catch (e) {}
+  }
+  var buf = soundBuffers[url];
+  if (!buf) {
+    // Buferis vēl nav ielādēts — ielādē un atskaņo
+    loadBuffer(url, function(b) {
+      try {
+        var src = ctx.createBufferSource();
+        src.buffer = b;
+        var gain = ctx.createGain();
+        gain.gain.value = 0.7;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(0);
+      } catch (e) {}
+    });
+    return;
+  }
+  try {
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var gain = ctx.createGain();
+    gain.gain.value = 0.7;
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(0);
+  } catch (e) {}
+}
+
+function playSound(overrideFile) {
+  if (!state.soundEnabled && !overrideFile) return;
+  var file = overrideFile || SOUND_FILES[state.soundIndex];
+  if (!file) return;
+  playSoundFile(file);
+}
+
+function playSoundNav() {
+  playSoundFile(SOUND_NAV);
+}
 
 // ── State ─────────────────────────────────────────────────────────────────
-const state = {
-  allJokes:     [],
-  filteredJokes:[],
-  shownIds:     new Set(),
-  favoriteIds:  new Set(),
-  currentJoke:  null,
-  history:      [],   // id masīvs
-  historyPos:   -1,   // pozīcija vēsturē
-  mode:         'MAIN',
-  fontSize:     22,   // Android noklusējums 22sp
-  soundEnabled: true,
-  soundIndex:   0,    // 0-4 (atbilst SOUND_FILES indeksam)
-  searchQuery:  '',
-  selectedCat:  '',
+var state = {
+  allJokes:      [],
+  filteredJokes: [],
+  shownIds:      {},   // id->true (Set aizstāts ar objektu saderībai)
+  favoriteIds:   {},
+  currentJoke:   null,
+  history:       [],
+  historyPos:    -1,
+  mode:          'MAIN',
+  fontSize:      22,
+  soundEnabled:  true,
+  soundIndex:    0,
+  searchQuery:   '',
+  selectedCat:   ''
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const el = {
-  headerBrand:         $('header-brand'),
-  btnDonate:           $('btn-donate'),
-  fontMinus:           $('font-minus'),
-  fontPlus:            $('font-plus'),
-  searchInput:         $('search-input'),
-  searchClear:         $('search-clear'),
-  statusText:          $('status-text'),
-  jokeCard:            $('joke-card'),
-  jokeNumber:          $('joke-number'),
-  jokeScroll:          $('joke-scroll'),
-  jokeText:            $('joke-text'),
-  btnFavorite:         $('btn-favorite'),
-  btnShare:            $('btn-share'),
-  btnResetSearch:      $('btn-reset-search'),
-  primaryBar:          $('primary-bar'),
-  btnPrev:             $('btn-prev'),
-  btnRandom:           $('btn-random'),
-  btnStar:             $('btn-star'),
-  navBar:              $('nav-bar'),
-  btnResults:          $('btn-results'),
-  btnNavFavorites:     $('btn-nav-favorites'),
-  btnResetShown:       $('btn-reset-shown'),
-  btnSettings:         $('btn-settings'),
-  btnBack:             $('btn-back'),
-  listContainer:       $('list-container'),
-  listTitle:           $('list-title'),
-  catFilterWrap:       $('cat-filter-wrap'),
-  catSelect:           $('cat-select'),
-  btnClearFavsInline:  $('btn-clear-favs-inline'),
-  listEmpty:           $('list-empty'),
-  listScroll:          $('list-scroll'),
-  settingsContainer:   $('settings-container'),
-  fontSizeLabel:       $('font-size-label'),
-  fontMinusSettings:   $('font-minus-settings'),
-  fontPlusSettings:    $('font-plus-settings'),
-  btnSoundToggle:      $('btn-sound-toggle'),
-  soundChips:          $('sound-chips'),
-  btnClearFavorites:   $('btn-clear-favorites'),
-  btnClearShown:       $('btn-clear-shown'),
-  btnClearAll:         $('btn-clear-all'),
-  btnContact:          $('btn-contact'),
-  donateModal:         $('donate-modal'),
-  btnBmc:              $('btn-bmc'),
-  btnRevolut:          $('btn-revolut'),
-  btnPaypal:           $('btn-paypal'),
-  btnDonateCancel:     $('btn-donate-cancel'),
-  contactModal:        $('contact-modal'),
-  contactInput:        $('contact-input'),
-  contactCounter:      $('contact-counter'),
-  btnContactSend:      $('btn-contact-send'),
-  btnContactCancel:    $('btn-contact-cancel'),
-  iosHint:             $('ios-hint'),
-  iosHintClose:        $('ios-hint-close'),
-  toast:               $('toast'),
+function $$(id) { return document.getElementById(id); }
+var el = {};
+function initEl() {
+  el.headerBrand        = $$('header-brand');
+  el.btnDonate          = $$('btn-donate');
+  el.fontMinus          = $$('font-minus');
+  el.fontPlus           = $$('font-plus');
+  el.searchInput        = $$('search-input');
+  el.searchClear        = $$('search-clear');
+  el.statusText         = $$('status-text');
+  el.jokeCard           = $$('joke-card');
+  el.jokeNumber         = $$('joke-number');
+  el.jokeScroll         = $$('joke-scroll');
+  el.jokeText           = $$('joke-text');
+  el.btnFavorite        = $$('btn-favorite');
+  el.btnShare           = $$('btn-share');
+  el.btnResetSearch     = $$('btn-reset-search');
+  el.primaryBar         = $$('primary-bar');
+  el.btnPrev            = $$('btn-prev');
+  el.btnRandom          = $$('btn-random');
+  el.btnStar            = $$('btn-star');
+  el.btnResults         = $$('btn-results');
+  el.btnNavFavorites    = $$('btn-nav-favorites');
+  el.btnResetShown      = $$('btn-reset-shown');
+  el.btnSettings        = $$('btn-settings');
+  el.btnBack            = $$('btn-back');
+  el.listContainer      = $$('list-container');
+  el.listTitle          = $$('list-title');
+  el.catFilterWrap      = $$('cat-filter-wrap');
+  el.catSelect          = $$('cat-select');
+  el.btnClearFavsInline = $$('btn-clear-favs-inline');
+  el.listEmpty          = $$('list-empty');
+  el.listScroll         = $$('list-scroll');
+  el.settingsContainer  = $$('settings-container');
+  el.fontSizeLabel      = $$('font-size-label');
+  el.fontMinusSettings  = $$('font-minus-settings');
+  el.fontPlusSettings   = $$('font-plus-settings');
+  el.btnSoundToggle     = $$('btn-sound-toggle');
+  el.soundChips         = $$('sound-chips');
+  el.btnClearFavorites  = $$('btn-clear-favorites');
+  el.btnClearShown      = $$('btn-clear-shown');
+  el.btnClearAll        = $$('btn-clear-all');
+  el.btnContact         = $$('btn-contact');
+  el.donateModal        = $$('donate-modal');
+  el.btnBmc             = $$('btn-bmc');
+  el.btnRevolut         = $$('btn-revolut');
+  el.btnPaypal          = $$('btn-paypal');
+  el.btnDonateCancel    = $$('btn-donate-cancel');
+  el.contactModal       = $$('contact-modal');
+  el.contactInput       = $$('contact-input');
+  el.contactCounter     = $$('contact-counter');
+  el.btnContactSend     = $$('btn-contact-send');
+  el.btnContactCancel   = $$('btn-contact-cancel');
+  el.iosHint            = $$('ios-hint');
+  el.iosHintClose       = $$('ios-hint-close');
+  el.toast              = $$('toast');
+}
+
+// ── Persistence (bez ??, lietots || ) ─────────────────────────────────────
+var LS = {
+  get: function(key) {
+    try { var v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  },
+  set: function(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
 };
 
-// ── Persistence ───────────────────────────────────────────────────────────
-const LS = {
-  get: key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
-  set: (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} },
-};
+// Saglabā shownIds kā masīvu
+function shownToArray() {
+  var arr = [];
+  for (var id in state.shownIds) { if (state.shownIds.hasOwnProperty(id)) arr.push(Number(id)); }
+  return arr;
+}
+function favToArray() {
+  var arr = [];
+  for (var id in state.favoriteIds) { if (state.favoriteIds.hasOwnProperty(id)) arr.push(Number(id)); }
+  return arr;
+}
 
 function loadPrefs() {
-  state.shownIds    = new Set(LS.get('shownIds')    || []);
-  state.favoriteIds = new Set(LS.get('favoriteIds') || []);
-  state.fontSize    = LS.get('font_size_sp') ?? 22;
-  state.soundEnabled= LS.get('sound_enabled') !== false; // default true
-  state.soundIndex  = (LS.get('sound_index') ?? 1) - 1; // Android saves 1-based
+  var shown = LS.get('shownIds') || [];
+  state.shownIds = {};
+  for (var i = 0; i < shown.length; i++) state.shownIds[shown[i]] = true;
+
+  var favs = LS.get('favoriteIds') || [];
+  state.favoriteIds = {};
+  for (var j = 0; j < favs.length; j++) state.favoriteIds[favs[j]] = true;
+
+  var fs = LS.get('font_size_sp');
+  state.fontSize = (fs !== null && fs !== undefined) ? fs : 22;
+
+  var se = LS.get('sound_enabled');
+  state.soundEnabled = (se === false) ? false : true;
+
+  var si = LS.get('sound_index');
+  state.soundIndex = (si !== null && si !== undefined) ? (si - 1) : 0;
   if (state.soundIndex < 0 || state.soundIndex > 4) state.soundIndex = 0;
+
   return LS.get('lastJokeId');
 }
-function saveShown()      { LS.set('shownIds', [...state.shownIds]); }
-function saveFavorites()  { LS.set('favoriteIds', [...state.favoriteIds]); }
-function saveLastJoke()   { if (state.currentJoke) LS.set('lastJokeId', state.currentJoke.id); }
-function saveFontSize()   { LS.set('font_size_sp', state.fontSize); }
-function saveSoundEnabled(){ LS.set('sound_enabled', state.soundEnabled); }
-function saveSoundIndex() { LS.set('sound_index', state.soundIndex + 1); } // Android saves 1-based
 
-// ── Latvian search (identisks Android TextSearchUtils) ────────────────────
+function saveShown()       { LS.set('shownIds', shownToArray()); }
+function saveFavorites()   { LS.set('favoriteIds', favToArray()); }
+function saveLastJoke()    { if (state.currentJoke) LS.set('lastJokeId', state.currentJoke.id); }
+function saveFontSize()    { LS.set('font_size_sp', state.fontSize); }
+function saveSoundEnabled(){ LS.set('sound_enabled', state.soundEnabled); }
+function saveSoundIndex()  { LS.set('sound_index', state.soundIndex + 1); }
+
+// ── Haptic (bez ?., saderīgs ar visiem) ──────────────────────────────────
+function haptic(duration) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(duration || 12);
+  } catch (e) {}
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+var toastTimer = null;
+function showToast(msg) {
+  el.toast.textContent = msg;
+  el.toast.className = 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { el.toast.className = ''; }, 2200);
+}
+
+// ── External link ─────────────────────────────────────────────────────────
+function openLink(url) {
+  try {
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e) {}
+}
+
+// ── HTML escape ───────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Latvian search ────────────────────────────────────────────────────────
 function normalizeLv(s) {
   if (!s) return '';
   return s.toLowerCase()
@@ -130,64 +294,47 @@ function normalizeLv(s) {
     .replace(/ū/g,'u').replace(/ž/g,'z')
     .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
 }
-const SUFFIXES = ['ajiem','ajam','ajai','ajās','ajus','ajām','iem','ajos','ajā',
+
+var SUFFIXES = ['ajiem','ajam','ajai','ajās','ajus','ajām','iem','ajos','ajā',
   'ām','am','em','im','us','as','es','os','is','ai','ei','ie','u','a','i','e','s'];
+
 function stem(word) {
-  const w = normalizeLv(word);
-  for (const s of SUFFIXES) {
-    if (w.length > s.length + 2 && w.endsWith(s)) return w.slice(0, w.length - s.length);
+  var w = normalizeLv(word);
+  for (var i = 0; i < SUFFIXES.length; i++) {
+    var s = SUFFIXES[i];
+    if (w.length > s.length + 2 && w.slice(-s.length) === s) {
+      return w.slice(0, w.length - s.length);
+    }
   }
   return w;
 }
+
 function matchesQuery(jokeText, query) {
   if (!query) return true;
-  // Atbalsta | (VAI) kā Android
-  const parts = query.split('|').map(p => p.trim()).filter(Boolean);
-  if (!parts.length) return true;
-  return parts.some(part => {
-    const qs = normalizeLv(part).split(' ').map(w => stem(w)).filter(w => w.length >= 2);
-    if (!qs.length) return true;
-    const norm = normalizeLv(jokeText);
-    return qs.every(s => norm.includes(s));
-  });
-}
+  var parts = query.split('|');
+  var filtered = [];
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim();
+    if (p) filtered.push(p);
+  }
+  if (!filtered.length) return true;
 
-// ── Audio ──────────────────────────────────────────────────────────────────
-function playSound(overrideFile) {
-  if (!state.soundEnabled && !overrideFile) return;
-  const src = overrideFile || SOUND_FILES[state.soundIndex];
-  if (!src) return;
-  try {
-    const a = new Audio(src);
-    a.volume = 0.7;
-    a.play().catch(() => {});
-  } catch {}
-}
-function playSoundNav() { playSound(SOUND_NAV); }
-
-// ── Haptic ────────────────────────────────────────────────────────────────
-function haptic(duration) { try { navigator.vibrate?.(duration || 12); } catch {} }
-
-// ── Toast ──────────────────────────────────────────────────────────────────
-let toastTimer = null;
-function showToast(msg) {
-  el.toast.textContent = msg;
-  el.toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.toast.classList.remove('show'), 2200);
-}
-
-// ── External link ─────────────────────────────────────────────────────────
-function openLink(url) {
-  const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-}
-
-// ── HTML escape ───────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  for (var pi = 0; pi < filtered.length; pi++) {
+    var words = normalizeLv(filtered[pi]).split(' ');
+    var stems = [];
+    for (var wi = 0; wi < words.length; wi++) {
+      var st = stem(words[wi]);
+      if (st.length >= 2) stems.push(st);
+    }
+    if (!stems.length) return true;
+    var norm = normalizeLv(jokeText);
+    var allMatch = true;
+    for (var si = 0; si < stems.length; si++) {
+      if (norm.indexOf(stems[si]) === -1) { allMatch = false; break; }
+    }
+    if (allMatch) return true;
+  }
+  return false;
 }
 
 // ── Filter ────────────────────────────────────────────────────────────────
@@ -195,22 +342,37 @@ function applyFilter(query, cat) {
   if (query !== undefined) state.searchQuery = query;
   if (cat   !== undefined) state.selectedCat = cat;
 
-  state.filteredJokes = state.allJokes.filter(j => {
-    const catOk = !state.selectedCat || j.cat === state.selectedCat;
-    const txtOk = matchesQuery(j.text, state.searchQuery);
-    return catOk && txtOk;
-  });
+  var filtered = [];
+  for (var i = 0; i < state.allJokes.length; i++) {
+    var j = state.allJokes[i];
+    var catOk = !state.selectedCat || j.cat === state.selectedCat;
+    var txtOk = matchesQuery(j.text, state.searchQuery);
+    if (catOk && txtOk) filtered.push(j);
+  }
+  state.filteredJokes = filtered;
 
-  el.searchClear.classList.toggle('visible', state.searchQuery.length > 0);
-  el.btnResetSearch.classList.toggle(
-    'visible',
-    state.searchQuery.length > 0 || state.selectedCat !== ''
-  );
+  if (state.searchQuery.length > 0) {
+    el.searchClear.className = 'visible';
+  } else {
+    el.searchClear.className = '';
+  }
+
+  var hasFilter = state.searchQuery.length > 0 || state.selectedCat !== '';
+  el.btnResetSearch.className = hasFilter ? 'visible' : '';
+
+  var hasCurrentInFiltered = false;
+  if (state.currentJoke) {
+    for (var k = 0; k < state.filteredJokes.length; k++) {
+      if (state.filteredJokes[k].id === state.currentJoke.id) {
+        hasCurrentInFiltered = true; break;
+      }
+    }
+  }
 
   if (!state.filteredJokes.length) {
     el.jokeNumber.textContent = '';
     el.jokeText.textContent = 'Pēc šī vaicājuma nekas neuzpeldēja. Pamēģini īsāku sakni vai | starp vārdiem.';
-  } else if (!state.filteredJokes.find(j => j.id === state.currentJoke?.id)) {
+  } else if (!hasCurrentInFiltered) {
     state.currentJoke = state.filteredJokes[0];
     renderJoke(state.currentJoke, false);
     saveLastJoke();
@@ -223,26 +385,25 @@ function applyFilter(query, cat) {
 // ── Render joke ───────────────────────────────────────────────────────────
 function renderJoke(joke, animate) {
   if (!joke) return;
-  // "Joks #ID · kategorija" — identisks Android txt_joke_number_cat
-  const numText = joke.cat
-    ? `Joks #${joke.id} · ${joke.cat}`
-    : `Joks #${joke.id}`;
+  var numText = joke.cat
+    ? ('Joks #' + joke.id + ' · ' + joke.cat)
+    : ('Joks #' + joke.id);
   el.jokeNumber.textContent = numText;
   el.jokeText.textContent = joke.text;
   el.jokeText.style.fontSize = state.fontSize + 'px';
   renderFavState();
   renderPrevBtn();
   if (animate) {
-    el.jokeCard.classList.remove('animate-in');
+    el.jokeCard.className = '';
+    // reflow
     void el.jokeCard.offsetWidth;
-    el.jokeCard.classList.add('animate-in');
+    el.jokeCard.className = 'animate-in';
   }
-  // Scroll karte uz sākumu
   el.jokeScroll.scrollTop = 0;
 }
 
 function renderFavState() {
-  if (state.currentJoke && state.favoriteIds.has(state.currentJoke.id)) {
+  if (state.currentJoke && state.favoriteIds[state.currentJoke.id]) {
     el.btnFavorite.textContent = '★ Saglabāts';
   } else {
     el.btnFavorite.textContent = '☆ Saglabāt';
@@ -250,35 +411,42 @@ function renderFavState() {
 }
 
 function renderPrevBtn() {
-  const hasPrev = state.history.length > 0 && state.historyPos > 0;
+  var hasPrev = state.history.length > 0 && state.historyPos > 0;
   el.btnPrev.disabled = !hasPrev;
   el.btnPrev.style.opacity = hasPrev ? '1' : '0.35';
 }
 
 function updateStatus() {
-  const shown = state.shownIds.size;
-  const total = state.allJokes.length;
-  el.statusText.textContent = `Redzēti: ${shown} / ${total}`;
+  var shown = 0;
+  for (var id in state.shownIds) {
+    if (state.shownIds.hasOwnProperty(id)) shown++;
+  }
+  el.statusText.textContent = 'Redzēti: ' + shown + ' / ' + state.allJokes.length;
 }
 
-// ── Sound chips (5 emoji identisks Android) ───────────────────────────────
+// ── Sound chips ───────────────────────────────────────────────────────────
 function buildSoundChips() {
   el.soundChips.innerHTML = '';
-  SOUND_LABELS.forEach((label, idx) => {
-    const btn = document.createElement('button');
-    btn.className = 'sound-chip' + (state.soundIndex === idx ? ' selected' : '');
-    btn.textContent = label;
-    btn.setAttribute('aria-label', label);
-    btn.addEventListener('click', () => {
-      state.soundIndex = idx;
-      saveSoundIndex();
-      el.soundChips.querySelectorAll('.sound-chip')
-        .forEach((c, i) => c.classList.toggle('selected', i === idx));
-      if (state.soundEnabled) playSound(SOUND_FILES[idx]);
-      haptic();
-    });
-    el.soundChips.appendChild(btn);
-  });
+  for (var idx = 0; idx < SOUND_LABELS.length; idx++) {
+    (function(i) {
+      var btn = document.createElement('button');
+      btn.className = 'sound-chip' + (state.soundIndex === i ? ' selected' : '');
+      btn.textContent = SOUND_LABELS[i];
+      btn.setAttribute('aria-label', SOUND_LABELS[i]);
+      btn.addEventListener('click', function() {
+        preloadSounds();
+        state.soundIndex = i;
+        saveSoundIndex();
+        var chips = el.soundChips.querySelectorAll('.sound-chip');
+        for (var c = 0; c < chips.length; c++) {
+          chips[c].className = 'sound-chip' + (c === i ? ' selected' : '');
+        }
+        if (state.soundEnabled) playSound(SOUND_FILES[i]);
+        haptic();
+      });
+      el.soundChips.appendChild(btn);
+    })(idx);
+  }
 }
 
 function renderSoundToggle() {
@@ -288,42 +456,39 @@ function renderSoundToggle() {
 }
 
 function renderFontLabel() {
-  el.fontSizeLabel.textContent = `Fonta izmērs: ${state.fontSize} sp`;
+  el.fontSizeLabel.textContent = 'Fonta izmērs: ' + state.fontSize + ' sp';
 }
 
 // ── Mode switching ────────────────────────────────────────────────────────
+function setClass(elem, cls, on) {
+  if (on) {
+    if (elem.className.indexOf(cls) === -1) elem.className += (elem.className ? ' ' : '') + cls;
+  } else {
+    elem.className = elem.className.replace(new RegExp('\\s*' + cls + '\\b', 'g'), '').trim();
+  }
+}
+
 function switchMode(mode) {
   state.mode = mode;
-  const isMain     = mode === 'MAIN';
-  const isResults  = mode === 'RESULTS';
-  const isFavorites= mode === 'FAVORITES';
-  const isList     = isResults || isFavorites;
-  const isSettings = mode === 'SETTINGS';
+  var isMain     = mode === 'MAIN';
+  var isResults  = mode === 'RESULTS';
+  var isFavorites= mode === 'FAVORITES';
+  var isList     = isResults || isFavorites;
+  var isSettings = mode === 'SETTINGS';
 
-  // Joke card + primary bar
-  el.jokeCard.style.display        = isMain ? 'flex' : 'none';
-  el.primaryBar.style.display      = isMain ? 'flex' : 'none';
+  el.jokeCard.style.display    = isMain ? 'flex' : 'none';
+  el.primaryBar.style.display  = isMain ? 'flex' : 'none';
 
-  // List container
-  el.listContainer.classList.toggle('visible', isList);
+  setClass(el.listContainer,     'visible', isList);
+  setClass(el.settingsContainer, 'visible', isSettings);
+  setClass(el.btnBack,           'visible', !isMain);
+  setClass(el.catFilterWrap,     'visible', isResults);
+  setClass(el.btnClearFavsInline,'visible', isFavorites);
 
-  // Settings
-  el.settingsContainer.classList.toggle('visible', isSettings);
-
-  // Back button (redzams sarakstā un iestatījumos)
-  el.btnBack.classList.toggle('visible', !isMain);
-
-  // Kategoriju dropdown — tikai RESULTS skatā, zem list title
-  el.catFilterWrap.classList.toggle('visible', isResults);
-
-  // "Notīrīt favorītus" inline — tikai FAVORITES skatā
-  el.btnClearFavsInline.classList.toggle('visible', isFavorites);
-
-  // Nav pogu aktīvie stāvokļi
-  el.btnResults.classList.toggle('active', isResults);
-  el.btnNavFavorites.classList.toggle('active', isFavorites);
-  el.btnSettings.classList.toggle('active', isSettings);
-  el.btnStar.classList.toggle('active', isFavorites);
+  setClass(el.btnResults,       'active', isResults);
+  setClass(el.btnNavFavorites,  'active', isFavorites);
+  setClass(el.btnSettings,      'active', isSettings);
+  setClass(el.btnStar,          'active', isFavorites);
 
   if (isList) {
     buildCatSelect();
@@ -339,41 +504,63 @@ function switchMode(mode) {
 
 // ── Category select ───────────────────────────────────────────────────────
 function buildCatSelect() {
-  const sel = el.catSelect;
+  var sel = el.catSelect;
   sel.innerHTML = '';
 
-  const allOpt = document.createElement('option');
+  var allOpt = document.createElement('option');
   allOpt.value = '';
   allOpt.textContent = 'Visas kategorijas';
   sel.appendChild(allOpt);
 
-  const sourceJokes = state.mode === 'FAVORITES'
-    ? state.allJokes.filter(j => state.favoriteIds.has(j.id))
+  var sourceJokes = state.mode === 'FAVORITES'
+    ? state.allJokes.filter(function(j) { return state.favoriteIds[j.id]; })
     : state.allJokes;
-  const available = new Set(sourceJokes.map(j => j.cat).filter(Boolean));
 
-  CATEGORIES.forEach(cat => {
-    if (!available.has(cat)) return;
-    const count = sourceJokes.filter(j => j.cat === cat).length;
-    const opt = document.createElement('option');
+  var available = {};
+  for (var i = 0; i < sourceJokes.length; i++) {
+    if (sourceJokes[i].cat) available[sourceJokes[i].cat] = true;
+  }
+
+  for (var ci = 0; ci < CATEGORIES.length; ci++) {
+    var cat = CATEGORIES[ci];
+    if (!available[cat]) continue;
+    var count = 0;
+    for (var ji = 0; ji < sourceJokes.length; ji++) {
+      if (sourceJokes[ji].cat === cat) count++;
+    }
+    var opt = document.createElement('option');
     opt.value = cat;
-    opt.textContent = `${cat} (${count})`;
+    opt.textContent = cat + ' (' + count + ')';
     sel.appendChild(opt);
-  });
-
+  }
   sel.value = state.selectedCat;
 }
 
 // ── List refresh ──────────────────────────────────────────────────────────
 function refreshList() {
-  let items = [];
+  var items = [];
   if (state.mode === 'RESULTS') {
     items = state.filteredJokes;
     el.listTitle.textContent = state.selectedCat || 'Visi joki';
   } else {
-    let favs = state.allJokes.filter(j => state.favoriteIds.has(j.id));
-    if (state.selectedCat)      favs = favs.filter(j => j.cat === state.selectedCat);
-    if (state.searchQuery.trim()) favs = favs.filter(j => matchesQuery(j.text, state.searchQuery));
+    var favs = [];
+    for (var i = 0; i < state.allJokes.length; i++) {
+      if (state.favoriteIds[state.allJokes[i].id]) favs.push(state.allJokes[i]);
+    }
+    if (state.selectedCat) {
+      var tmp = [];
+      for (var fi = 0; fi < favs.length; fi++) {
+        if (favs[fi].cat === state.selectedCat) tmp.push(favs[fi]);
+      }
+      favs = tmp;
+    }
+    if (state.searchQuery.trim()) {
+      var tmp2 = [];
+      for (var fj = 0; fj < favs.length; fj++) {
+        if (matchesQuery(favs[fj].text, state.searchQuery)) tmp2.push(favs[fj]);
+      }
+      favs = tmp2;
+    }
     items = favs;
     el.listTitle.textContent = 'Saglabātie joki';
   }
@@ -381,54 +568,62 @@ function refreshList() {
   el.listScroll.innerHTML = '';
 
   if (!items.length) {
-    el.listEmpty.classList.add('visible');
+    setClass(el.listEmpty, 'visible', true);
     el.listEmpty.textContent = state.mode === 'FAVORITES'
       ? '☆ Nav saglabātu favorītu. Piespiedi ☆ pie joka, lai to pievienotu šeit.'
       : 'Šajā kategorijā nekas neuzpeldēja.';
     return;
   }
-  el.listEmpty.classList.remove('visible');
+  setClass(el.listEmpty, 'visible', false);
 
-  const frag = document.createDocumentFragment();
-  items.forEach(joke => {
-    const div = document.createElement('div');
-    div.className = 'joke-item' + (state.favoriteIds.has(joke.id) ? ' fav' : '');
-    const catSpan = joke.cat ? ` · <span class="joke-item-cat">${escHtml(joke.cat)}</span>` : '';
-    div.innerHTML =
-      `<div class="joke-item-num">Joks #${joke.id}${catSpan}</div>` +
-      `<div class="joke-item-text">${escHtml(joke.text)}</div>`;
-    div.addEventListener('click', () => {
-      state.currentJoke = joke;
-      renderJoke(joke, true);
-      saveLastJoke();
-      state.selectedCat = '';
-      applyFilter(undefined, '');
-      switchMode('MAIN');
-      playSoundNav();
-      haptic();
-    });
-    frag.appendChild(div);
-  });
+  var frag = document.createDocumentFragment();
+  for (var li = 0; li < items.length; li++) {
+    (function(joke) {
+      var div = document.createElement('div');
+      div.className = 'joke-item' + (state.favoriteIds[joke.id] ? ' fav' : '');
+      var catSpan = joke.cat
+        ? ' &middot; <span class="joke-item-cat">' + escHtml(joke.cat) + '</span>'
+        : '';
+      div.innerHTML =
+        '<div class="joke-item-num">Joks #' + joke.id + catSpan + '</div>' +
+        '<div class="joke-item-text">' + escHtml(joke.text) + '</div>';
+      div.addEventListener('click', function() {
+        preloadSounds();
+        state.currentJoke = joke;
+        renderJoke(joke, true);
+        saveLastJoke();
+        state.selectedCat = '';
+        applyFilter(undefined, '');
+        switchMode('MAIN');
+        playSoundNav();
+        haptic();
+      });
+      frag.appendChild(div);
+    })(items[li]);
+  }
   el.listScroll.appendChild(frag);
 }
 
-// ── Random (ar vēsturi) ───────────────────────────────────────────────────
+// ── Random ────────────────────────────────────────────────────────────────
 function showRandom() {
-  const pool = state.filteredJokes.filter(j => !state.shownIds.has(j.id));
+  preloadSounds();
+  var pool = [];
+  for (var i = 0; i < state.filteredJokes.length; i++) {
+    if (!state.shownIds[state.filteredJokes[i].id]) pool.push(state.filteredJokes[i]);
+  }
   if (!pool.length) {
     el.jokeText.textContent = 'Izsmēlis visu krājumu. Nospied "Atjaunot" un sāc no jauna.';
     el.jokeNumber.textContent = '';
-    el.jokeCard.classList.remove('animate-in');
+    el.jokeCard.className = '';
     void el.jokeCard.offsetWidth;
-    el.jokeCard.classList.add('animate-in');
+    el.jokeCard.className = 'animate-in';
     return;
   }
-  const next = pool[Math.floor(Math.random() * pool.length)];
-  state.shownIds.add(next.id);
+  var next = pool[Math.floor(Math.random() * pool.length)];
+  state.shownIds[next.id] = true;
   saveShown();
   state.currentJoke = next;
 
-  // Pievieno vēsturei (nogriež uz priekšu ja bija atgriezušies)
   state.history = state.history.slice(0, state.historyPos + 1);
   state.history.push(next.id);
   if (state.history.length > 200) state.history.shift();
@@ -442,12 +637,16 @@ function showRandom() {
   updateStatus();
 }
 
-// ── Atpakaļ (vēsturē) ─────────────────────────────────────────────────────
+// ── Atpakaļ ───────────────────────────────────────────────────────────────
 function showPrev() {
+  preloadSounds();
   if (state.historyPos <= 0) return;
   state.historyPos--;
-  const id = state.history[state.historyPos];
-  const joke = state.allJokes.find(j => j.id === id);
+  var id = state.history[state.historyPos];
+  var joke = null;
+  for (var i = 0; i < state.allJokes.length; i++) {
+    if (state.allJokes[i].id === id) { joke = state.allJokes[i]; break; }
+  }
   if (!joke) return;
   state.currentJoke = joke;
   renderJoke(joke, true);
@@ -460,12 +659,12 @@ function showPrev() {
 // ── Favorite ──────────────────────────────────────────────────────────────
 function toggleFavorite() {
   if (!state.currentJoke) return;
-  const id = state.currentJoke.id;
-  if (state.favoriteIds.has(id)) {
-    state.favoriteIds.delete(id);
+  var id = state.currentJoke.id;
+  if (state.favoriteIds[id]) {
+    delete state.favoriteIds[id];
     showToast('Izņemts no favorītiem');
   } else {
-    state.favoriteIds.add(id);
+    state.favoriteIds[id] = true;
     showToast('Pievienots favorītiem ★');
   }
   saveFavorites();
@@ -478,11 +677,24 @@ function toggleFavorite() {
 // ── Share ─────────────────────────────────────────────────────────────────
 function shareJoke() {
   if (!state.currentJoke) return;
-  const text = `Joks #${state.currentJoke.id}\n${state.currentJoke.text}\n\n— Sliktie joki 30+`;
+  var text = 'Joks #' + state.currentJoke.id + '\n' + state.currentJoke.text + '\n\n— Sliktie joki 30+';
   if (navigator.share) {
-    navigator.share({ title: 'Sliktais joks', text }).catch(() => {});
+    try { navigator.share({ title: 'Sliktais joks', text: text }); } catch (e) {}
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { showToast('Nokopēts!'); });
   } else {
-    navigator.clipboard?.writeText(text).then(() => showToast('Nokopēts!'));
+    // Fallback vecajiem pārlūkiem
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('Nokopēts!');
+    } catch (e) {}
   }
   haptic();
 }
@@ -497,54 +709,69 @@ function changeFontSize(delta) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────
-function openModal(id)  {
-  $(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
+function openModal(id) {
+  var m = $$(id);
+  if (m) { setClass(m, 'open', true); document.body.style.overflow = 'hidden'; }
 }
 function closeModal(id) {
-  $(id).classList.remove('open');
-  document.body.style.overflow = '';
+  var m = $$(id);
+  if (m) { setClass(m, 'open', false); document.body.style.overflow = ''; }
 }
 
 // ── Telegram ──────────────────────────────────────────────────────────────
-const BOT_TOKEN = '8779790699:AAFnA4UYn17yCiuKHvV2n0RWvHdxlk97f-U';
-const CHAT_ID   = '7575867937';
-async function sendTelegram(text) {
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: CHAT_ID, text }),
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+var BOT_TOKEN = '8779790699:AAFnA4UYn17yCiuKHvV2n0RWvHdxlk97f-U';
+var CHAT_ID   = '7575867937';
+function sendTelegram(text, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onload = function() {
+    if (xhr.status >= 200 && xhr.status < 300) { if (onSuccess) onSuccess(); }
+    else { if (onError) onError(); }
+  };
+  xhr.onerror = function() { if (onError) onError(); };
+  try { xhr.send(JSON.stringify({ chat_id: CHAT_ID, text: text })); }
+  catch (e) { if (onError) onError(); }
 }
 
 // ── iOS hint ──────────────────────────────────────────────────────────────
 function maybeShowIosHint() {
-  const ua = navigator.userAgent;
-  const isIos = /iphone|ipad|ipod/i.test(ua);
-  const isSafari = /safari/i.test(ua) && !/chrome|chromium|crios/i.test(ua);
-  if (isIos && isSafari && !window.navigator.standalone && !LS.get('iosHintDismissed')) {
-    setTimeout(() => el.iosHint.classList.add('show'), 3000);
-  }
+  try {
+    var ua = navigator.userAgent;
+    var isIos = /iphone|ipad|ipod/i.test(ua);
+    var isSafari = /safari/i.test(ua) && !/chrome|chromium|crios/i.test(ua);
+    var standalone = window.navigator.standalone;
+    if (isIos && isSafari && !standalone && !LS.get('iosHintDismissed')) {
+      setTimeout(function() { setClass(el.iosHint, 'show', true); }, 3000);
+    }
+  } catch (e) {}
+}
+
+// ── addEvent helper ───────────────────────────────────────────────────────
+function on(elem, evt, fn) {
+  if (elem.addEventListener) elem.addEventListener(evt, fn, false);
+  else if (elem.attachEvent) elem.attachEvent('on' + evt, fn);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 function init() {
+  initEl();
   state.allJokes = JOKES_DATA;
-  const lastId = loadPrefs();
-  state.filteredJokes = [...state.allJokes];
+  var lastId = loadPrefs();
+  state.filteredJokes = state.allJokes.slice();
   el.jokeText.style.fontSize = state.fontSize + 'px';
 
-  // Atjauno pēdējo joku
-  let restored = false;
-  if (lastId != null) {
-    const found = state.allJokes.find(j => j.id === lastId);
-    if (found) {
-      state.currentJoke = found;
-      state.history = [found.id];
-      state.historyPos = 0;
-      renderJoke(found, false);
-      restored = true;
+  var restored = false;
+  if (lastId !== null && lastId !== undefined) {
+    for (var fi = 0; fi < state.allJokes.length; fi++) {
+      if (state.allJokes[fi].id === lastId) {
+        state.currentJoke = state.allJokes[fi];
+        state.history = [lastId];
+        state.historyPos = 0;
+        renderJoke(state.currentJoke, false);
+        restored = true;
+        break;
+      }
     }
   }
   if (!restored && state.allJokes.length) {
@@ -559,14 +786,14 @@ function init() {
   updateStatus();
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    try { navigator.serviceWorker.register('sw.js'); } catch (e) {}
   }
   maybeShowIosHint();
 
-  // ── Events ──────────────────────────────────────────────────────────────
+  // ── Events ────────────────────────────────────────────────────────────
 
-  // Header brand → MAIN (v2.3 jaunums)
-  el.headerBrand.addEventListener('click', () => {
+  on(el.headerBrand, 'click', function() {
+    preloadSounds();
     if (state.mode !== 'MAIN') {
       state.selectedCat = '';
       applyFilter(undefined, '');
@@ -576,66 +803,68 @@ function init() {
     }
   });
 
-  // Fonta pogas headerā
-  el.fontMinus.addEventListener('click', () => changeFontSize(-2));
-  el.fontPlus.addEventListener('click',  () => changeFontSize(+2));
+  on(el.fontMinus, 'click', function() { changeFontSize(-2); });
+  on(el.fontPlus,  'click', function() { changeFontSize(+2); });
 
-  // Search
-  el.searchInput.addEventListener('input', e => applyFilter(e.target.value));
-  el.searchClear.addEventListener('click', () => {
+  on(el.searchInput, 'input', function(e) {
+    applyFilter(e.target.value);
+  });
+  on(el.searchClear, 'click', function() {
     el.searchInput.value = '';
     applyFilter('');
   });
-  el.btnResetSearch.addEventListener('click', () => {
+  on(el.btnResetSearch, 'click', function() {
     el.searchInput.value = '';
     state.selectedCat = '';
     applyFilter('', '');
     switchMode('MAIN');
   });
 
-  // Joke card actions
-  el.btnFavorite.addEventListener('click', toggleFavorite);
-  el.btnShare.addEventListener('click', shareJoke);
+  on(el.btnFavorite, 'click', toggleFavorite);
+  on(el.btnShare,    'click', shareJoke);
 
-  // Primary bar
-  el.btnRandom.addEventListener('click', showRandom);
-  el.btnPrev.addEventListener('click', showPrev);
-  el.btnStar.addEventListener('click', () => {
+  on(el.btnRandom, 'click', showRandom);
+  on(el.btnPrev,   'click', showPrev);
+  on(el.btnStar,   'click', function() {
+    preloadSounds();
     state.selectedCat = '';
     switchMode('FAVORITES');
     playSoundNav();
     haptic();
   });
 
-  // Nav bar
-  el.btnResults.addEventListener('click', () => {
+  on(el.btnResults, 'click', function() {
+    preloadSounds();
     state.selectedCat = '';
     applyFilter(undefined, '');
     switchMode('RESULTS');
     playSoundNav();
     haptic();
   });
-  el.btnNavFavorites.addEventListener('click', () => {
+  on(el.btnNavFavorites, 'click', function() {
+    preloadSounds();
     state.selectedCat = '';
     switchMode('FAVORITES');
     playSoundNav();
     haptic();
   });
-  el.btnResetShown.addEventListener('click', () => {
-    state.shownIds.clear();
+  on(el.btnResetShown, 'click', function() {
+    preloadSounds();
+    state.shownIds = {};
     saveShown();
     haptic();
     updateStatus();
     showToast('Redzēto saraksts notīrīts');
   });
-  el.btnSettings.addEventListener('click', () => {
+  on(el.btnSettings, 'click', function() {
+    preloadSounds();
     switchMode('SETTINGS');
     playSoundNav();
     haptic();
   });
 
-  // Atpakaļ poga
-  el.btnBack.addEventListener('click', () => {
+  on(el.btnBack, 'click', function() {
+    preloadSounds();
     state.selectedCat = '';
     applyFilter(undefined, '');
     switchMode('MAIN');
@@ -643,16 +872,14 @@ function init() {
     haptic();
   });
 
-  // Kategoriju dropdown
-  el.catSelect.addEventListener('change', () => {
+  on(el.catSelect, 'change', function() {
     applyFilter(undefined, el.catSelect.value);
     haptic();
   });
 
-  // Notīrīt favorītus inline (FAVORĪTI skatā)
-  el.btnClearFavsInline.addEventListener('click', () => {
+  on(el.btnClearFavsInline, 'click', function() {
     if (!confirm('Dzēst visus favorītus?')) return;
-    state.favoriteIds.clear();
+    state.favoriteIds = {};
     saveFavorites();
     haptic();
     updateStatus();
@@ -660,11 +887,11 @@ function init() {
     showToast('Favorīti notīrīti');
   });
 
-  // Settings
-  el.fontMinusSettings.addEventListener('click', () => changeFontSize(-2));
-  el.fontPlusSettings.addEventListener('click',  () => changeFontSize(+2));
+  on(el.fontMinusSettings, 'click', function() { changeFontSize(-2); });
+  on(el.fontPlusSettings,  'click', function() { changeFontSize(+2); });
 
-  el.btnSoundToggle.addEventListener('click', () => {
+  on(el.btnSoundToggle, 'click', function() {
+    preloadSounds();
     state.soundEnabled = !state.soundEnabled;
     saveSoundEnabled();
     renderSoundToggle();
@@ -672,26 +899,26 @@ function init() {
     if (state.soundEnabled) playSound();
   });
 
-  el.btnClearFavorites.addEventListener('click', () => {
+  on(el.btnClearFavorites, 'click', function() {
     if (!confirm('Dzēst visus favorītus?')) return;
-    state.favoriteIds.clear();
+    state.favoriteIds = {};
     saveFavorites();
     haptic();
     updateStatus();
     showToast('Favorīti notīrīti');
   });
-  el.btnClearShown.addEventListener('click', () => {
+  on(el.btnClearShown, 'click', function() {
     if (!confirm('Aizmirst visus redzētos jokus?')) return;
-    state.shownIds.clear();
+    state.shownIds = {};
     saveShown();
     haptic();
     updateStatus();
     showToast('Redzēto saraksts notīrīts');
   });
-  el.btnClearAll.addEventListener('click', () => {
+  on(el.btnClearAll, 'click', function() {
     if (!confirm('Notīrīt visu saglabāto (redzēti + favorīti)?')) return;
-    state.shownIds.clear();
-    state.favoriteIds.clear();
+    state.shownIds = {};
+    state.favoriteIds = {};
     saveShown();
     saveFavorites();
     state.history = [];
@@ -709,64 +936,68 @@ function init() {
     showToast('Viss notīrīts');
   });
 
-  // Kontakts
-  el.btnContact.addEventListener('click', () => {
+  on(el.btnContact, 'click', function() {
     el.contactInput.value = '';
     el.contactCounter.textContent = '0 / 500';
     openModal('contact-modal');
-    setTimeout(() => el.contactInput.focus(), 300);
+    setTimeout(function() { try { el.contactInput.focus(); } catch (e) {} }, 300);
   });
-  el.btnContactCancel.addEventListener('click', () => closeModal('contact-modal'));
-  el.contactModal.addEventListener('click', e => {
+  on(el.btnContactCancel, 'click', function() { closeModal('contact-modal'); });
+  on(el.contactModal, 'click', function(e) {
     if (e.target === el.contactModal) closeModal('contact-modal');
   });
-  el.contactInput.addEventListener('input', () => {
-    const len = el.contactInput.value.length;
-    el.contactCounter.textContent = `${len} / 500`;
+  on(el.contactInput, 'input', function() {
+    var len = el.contactInput.value.length;
+    el.contactCounter.textContent = len + ' / 500';
     el.contactCounter.style.color = len >= 480 ? '#e53935' : '#888';
     if (len > 500) el.contactInput.value = el.contactInput.value.slice(0, 500);
   });
-  el.btnContactSend.addEventListener('click', async () => {
-    const msg = el.contactInput.value.trim();
+  on(el.btnContactSend, 'click', function() {
+    var msg = el.contactInput.value.trim();
     if (!msg) { showToast('Ziņa ir tukša!'); return; }
     el.btnContactSend.textContent = 'Sūta...';
     el.btnContactSend.disabled = true;
-    try {
-      await sendTelegram(`[Sliktie joki PWA]\n${msg}`);
-      closeModal('contact-modal');
-      showToast('Ziņa nosūtīta! ✓');
-    } catch {
-      showToast('Kļūda! Mēģini vēlreiz.');
-    } finally {
-      el.btnContactSend.textContent = 'Nosūtīt ziņu';
-      el.btnContactSend.disabled = false;
-    }
+    sendTelegram('[Sliktie joki PWA]\n' + msg,
+      function() {
+        closeModal('contact-modal');
+        showToast('Ziņa nosūtīta! ✓');
+        el.btnContactSend.textContent = 'Nosūtīt ziņu';
+        el.btnContactSend.disabled = false;
+      },
+      function() {
+        showToast('Kļūda! Mēģini vēlreiz.');
+        el.btnContactSend.textContent = 'Nosūtīt ziņu';
+        el.btnContactSend.disabled = false;
+      }
+    );
   });
 
-  // Donate
-  el.btnDonate.addEventListener('click', () => openModal('donate-modal'));
-  el.btnDonateCancel.addEventListener('click', () => closeModal('donate-modal'));
-  el.donateModal.addEventListener('click', e => {
+  on(el.btnDonate, 'click', function() { openModal('donate-modal'); });
+  on(el.btnDonateCancel, 'click', function() { closeModal('donate-modal'); });
+  on(el.donateModal, 'click', function(e) {
     if (e.target === el.donateModal) closeModal('donate-modal');
   });
-  el.btnBmc.addEventListener('click', () => {
+  on(el.btnBmc, 'click', function() {
     closeModal('donate-modal');
     openLink('https://buymeacoffee.com/ingmarsv');
   });
-  el.btnRevolut.addEventListener('click', () => {
+  on(el.btnRevolut, 'click', function() {
     closeModal('donate-modal');
     openLink('https://revolut.me/ingmars2v72');
   });
-  el.btnPaypal.addEventListener('click', () => {
+  on(el.btnPaypal, 'click', function() {
     closeModal('donate-modal');
     openLink('https://paypal.me/IngmarsVigners');
   });
 
-  // iOS hint
-  el.iosHintClose.addEventListener('click', () => {
-    el.iosHint.classList.remove('show');
+  on(el.iosHintClose, 'click', function() {
+    setClass(el.iosHint, 'show', false);
     LS.set('iosHintDismissed', true);
   });
 }
 
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
